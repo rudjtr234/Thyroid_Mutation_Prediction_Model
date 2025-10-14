@@ -1,0 +1,1877 @@
+{
+  "hyperparameters": {
+    "lr": 0.0001,
+    "weight_decay": 0.001,
+    "max_grad_norm": 1.0
+  },
+  "final": {
+    "auc": 0.57475,
+    "accuracy": 0.51,
+    "precision": 0.6,
+    "recall": 0.06,
+    "f1_score": 0.10909090909090909,
+    "confusion_matrix": [
+      [
+        96,
+        4
+      ],
+      [
+        94,
+        6
+      ]
+    ],
+    "classification_report": "              precision    recall  f1-score   support\n\n           0       0.51      0.96      0.66       100\n           1       0.60      0.06      0.11       100\n\n    accuracy                           0.51       200\n   macro avg       0.55      0.51      0.39       200\nweighted avg       0.55      0.51      0.39       200\n"
+  },
+  "folds": [
+    {
+      "fold": 1,
+      "accuracy": 0.5,
+      "auc": 0.38749999999999996,
+      "best_val_auc": 0.8532008623113694,
+      "test_wsis": [
+        "TC_04_5306.npy",
+        "TC_04_1480.npy",
+        "TC_04_3336.npy",
+        "TC_04_3127.npy",
+        "TC_04_0560.npy",
+        "TC_04_1450.npy",
+        "TC_04_2660.npy",
+        "TC_04_6923.npy",
+        "TC_04_4425.npy",
+        "TC_04_5818.npy",
+        "TC_04_4459.npy",
+        "TC_04_2343.npy",
+        "TC_04_2862.npy",
+        "TC_04_1865.npy",
+        "TC_04_6456.npy",
+        "TC_04_5417.npy",
+        "TC_04_5295.npy",
+        "TC_04_6663.npy",
+        "TC_04_4439.npy",
+        "TC_04_4117.npy",
+        "TC_04_4047.npy",
+        "TC_04_2929.npy",
+        "TC_04_4502.npy",
+        "TC_04_3008.npy",
+        "TC_04_6332.npy",
+        "TC_04_1144.npy",
+        "TC_04_1855.npy",
+        "TC_04_7874.npy",
+        "TC_04_2443.npy",
+        "TC_04_3422.npy",
+        "TC_04_6902.npy",
+        "TC_04_1610.npy",
+        "TC_04_4415.npy",
+        "TC_04_7202.npy",
+        "TC_04_3588.npy",
+        "TC_04_5599.npy",
+        "TC_04_2606.npy",
+        "TC_04_7346.npy",
+        "TC_04_7133.npy",
+        "TC_04_0722.npy"
+      ],
+      "test_results": [
+        {
+          "filename": "TC_04_1480.npy",
+          "true_label": 1,
+          "weighted_prob": 3.941843990929459e-06,
+          "simple_avg_prob": 3.984410500379454e-06,
+          "pred_label": 0,
+          "num_bags": 10
+        },
+        {
+          "filename": "TC_04_1865.npy",
+          "true_label": 1,
+          "weighted_prob": 5.1278720733331157e-05,
+          "simple_avg_prob": 5.130536581938421e-05,
+          "pred_label": 0,
+          "num_bags": 14
+        },
+        {
+          "filename": "TC_04_4117.npy",
+          "true_label": 1,
+          "weighted_prob": 9.11801838943743e-06,
+          "simple_avg_prob": 9.12509904082981e-06,
+          "pred_label": 0,
+          "num_bags": 12
+        },
+        {
+          "filename": "TC_04_2660.npy",
+          "true_label": 1,
+          "weighted_prob": 4.482986930177156e-05,
+          "simple_avg_prob": 4.484686238962846e-05,
+          "pred_label": 0,
+          "num_bags": 9
+        },
+        {
+          "filename": "TC_04_3336.npy",
+          "true_label": 1,
+          "weighted_prob": 2.3360006770769834e-05,
+          "simple_avg_prob": 2.3369130628582623e-05,
+          "pred_label": 0,
+          "num_bags": 14
+        },
+        {
+          "filename": "TC_04_4439.npy",
+          "true_label": 1,
+          "weighted_prob": 1.538529380955215e-05,
+          "simple_avg_prob": 1.538650424966666e-05,
+          "pred_label": 0,
+          "num_bags": 9
+        },
+        {
+          "filename": "TC_04_6663.npy",
+          "true_label": 1,
+          "weighted_prob": 0.0007587157877014174,
+          "simple_avg_prob": 0.0007596255745738745,
+          "pred_label": 0,
+          "num_bags": 10
+        },
+        {
+          "filename": "TC_04_6923.npy",
+          "true_label": 1,
+          "weighted_prob": 0.0004785570541208967,
+          "simple_avg_prob": 0.00047889900088193826,
+          "pred_label": 0,
+          "num_bags": 8
+        },
+        {
+          "filename": "TC_04_5417.npy",
+          "true_label": 1,
+          "weighted_prob": 0.0008057939019245495,
+          "simple_avg_prob": 0.0008067601094288486,
+          "pred_label": 0,
+          "num_bags": 14
+        },
+        {
+          "filename": "TC_04_5818.npy",
+          "true_label": 1,
+          "weighted_prob": 0.13400977908203748,
+          "simple_avg_prob": 0.13429559714027814,
+          "pred_label": 0,
+          "num_bags": 14
+        },
+        {
+          "filename": "TC_04_1450.npy",
+          "true_label": 1,
+          "weighted_prob": 1.8922388359699504e-06,
+          "simple_avg_prob": 1.8929164070868866e-06,
+          "pred_label": 0,
+          "num_bags": 10
+        },
+        {
+          "filename": "TC_04_4425.npy",
+          "true_label": 1,
+          "weighted_prob": 4.745583681568826e-06,
+          "simple_avg_prob": 4.7473781137341575e-06,
+          "pred_label": 0,
+          "num_bags": 8
+        },
+        {
+          "filename": "TC_04_5306.npy",
+          "true_label": 1,
+          "weighted_prob": 7.170943204818173e-06,
+          "simple_avg_prob": 7.171481823976277e-06,
+          "pred_label": 0,
+          "num_bags": 13
+        },
+        {
+          "filename": "TC_04_3127.npy",
+          "true_label": 1,
+          "weighted_prob": 4.9087876709087e-05,
+          "simple_avg_prob": 4.911069117952138e-05,
+          "pred_label": 0,
+          "num_bags": 7
+        },
+        {
+          "filename": "TC_04_2343.npy",
+          "true_label": 1,
+          "weighted_prob": 5.638113052247458e-06,
+          "simple_avg_prob": 5.6397196810091066e-06,
+          "pred_label": 0,
+          "num_bags": 15
+        },
+        {
+          "filename": "TC_04_5295.npy",
+          "true_label": 1,
+          "weighted_prob": 0.0003606114101530213,
+          "simple_avg_prob": 0.0003608172555686906,
+          "pred_label": 0,
+          "num_bags": 10
+        },
+        {
+          "filename": "TC_04_4459.npy",
+          "true_label": 1,
+          "weighted_prob": 3.6916417613820014e-06,
+          "simple_avg_prob": 3.695602365703301e-06,
+          "pred_label": 0,
+          "num_bags": 11
+        },
+        {
+          "filename": "TC_04_2862.npy",
+          "true_label": 1,
+          "weighted_prob": 7.71775294107614e-05,
+          "simple_avg_prob": 7.718835010617862e-05,
+          "pred_label": 0,
+          "num_bags": 17
+        },
+        {
+          "filename": "TC_04_6456.npy",
+          "true_label": 1,
+          "weighted_prob": 3.311212170016821e-05,
+          "simple_avg_prob": 3.3119975901522244e-05,
+          "pred_label": 0,
+          "num_bags": 13
+        },
+        {
+          "filename": "TC_04_0560.npy",
+          "true_label": 1,
+          "weighted_prob": 5.782776063401811e-06,
+          "simple_avg_prob": 5.80070513933606e-06,
+          "pred_label": 0,
+          "num_bags": 8
+        },
+        {
+          "filename": "TC_04_7133.npy",
+          "true_label": 0,
+          "weighted_prob": 0.00010415189684207147,
+          "simple_avg_prob": 0.0001042505255099968,
+          "pred_label": 0,
+          "num_bags": 8
+        },
+        {
+          "filename": "TC_04_2929.npy",
+          "true_label": 0,
+          "weighted_prob": 1.0455796483727893e-05,
+          "simple_avg_prob": 1.0462810188563219e-05,
+          "pred_label": 0,
+          "num_bags": 13
+        },
+        {
+          "filename": "TC_04_2443.npy",
+          "true_label": 0,
+          "weighted_prob": 0.0003033830985058125,
+          "simple_avg_prob": 0.0003034692257642746,
+          "pred_label": 0,
+          "num_bags": 15
+        },
+        {
+          "filename": "TC_04_2606.npy",
+          "true_label": 0,
+          "weighted_prob": 0.016973297764681705,
+          "simple_avg_prob": 0.01697546403322901,
+          "pred_label": 0,
+          "num_bags": 7
+        },
+        {
+          "filename": "TC_04_1144.npy",
+          "true_label": 0,
+          "weighted_prob": 3.782485498399708e-06,
+          "simple_avg_prob": 3.7834927947447535e-06,
+          "pred_label": 0,
+          "num_bags": 7
+        },
+        {
+          "filename": "TC_04_5599.npy",
+          "true_label": 0,
+          "weighted_prob": 0.000930366399331464,
+          "simple_avg_prob": 0.0009318435242256293,
+          "pred_label": 0,
+          "num_bags": 13
+        },
+        {
+          "filename": "TC_04_3422.npy",
+          "true_label": 0,
+          "weighted_prob": 9.09463782115617e-05,
+          "simple_avg_prob": 9.096567459089463e-05,
+          "pred_label": 0,
+          "num_bags": 17
+        },
+        {
+          "filename": "TC_04_6902.npy",
+          "true_label": 0,
+          "weighted_prob": 0.007895675956134206,
+          "simple_avg_prob": 0.00789841148070991,
+          "pred_label": 0,
+          "num_bags": 10
+        },
+        {
+          "filename": "TC_04_7346.npy",
+          "true_label": 0,
+          "weighted_prob": 2.9853638618473683e-06,
+          "simple_avg_prob": 2.9893429159115343e-06,
+          "pred_label": 0,
+          "num_bags": 11
+        },
+        {
+          "filename": "TC_04_7202.npy",
+          "true_label": 0,
+          "weighted_prob": 0.004215448515465158,
+          "simple_avg_prob": 0.0042202362409708176,
+          "pred_label": 0,
+          "num_bags": 11
+        },
+        {
+          "filename": "TC_04_6332.npy",
+          "true_label": 0,
+          "weighted_prob": 0.00036737189846341566,
+          "simple_avg_prob": 0.00036775291276474795,
+          "pred_label": 0,
+          "num_bags": 15
+        },
+        {
+          "filename": "TC_04_0722.npy",
+          "true_label": 0,
+          "weighted_prob": 5.078900433500488e-05,
+          "simple_avg_prob": 5.08058513911568e-05,
+          "pred_label": 0,
+          "num_bags": 11
+        },
+        {
+          "filename": "TC_04_4502.npy",
+          "true_label": 0,
+          "weighted_prob": 6.023288847019368e-05,
+          "simple_avg_prob": 6.0244399113192536e-05,
+          "pred_label": 0,
+          "num_bags": 12
+        },
+        {
+          "filename": "TC_04_7874.npy",
+          "true_label": 0,
+          "weighted_prob": 0.00015892108850385788,
+          "simple_avg_prob": 0.00015905692707747222,
+          "pred_label": 0,
+          "num_bags": 10
+        },
+        {
+          "filename": "TC_04_3588.npy",
+          "true_label": 0,
+          "weighted_prob": 1.6753782932999476e-05,
+          "simple_avg_prob": 1.6763473013270414e-05,
+          "pred_label": 0,
+          "num_bags": 12
+        },
+        {
+          "filename": "TC_04_1610.npy",
+          "true_label": 0,
+          "weighted_prob": 7.795122187124523e-05,
+          "simple_avg_prob": 7.803063971760611e-05,
+          "pred_label": 0,
+          "num_bags": 13
+        },
+        {
+          "filename": "TC_04_1855.npy",
+          "true_label": 0,
+          "weighted_prob": 1.0217713977800456e-05,
+          "simple_avg_prob": 1.0222778076819271e-05,
+          "pred_label": 0,
+          "num_bags": 11
+        },
+        {
+          "filename": "TC_04_3008.npy",
+          "true_label": 0,
+          "weighted_prob": 0.0001501826554554132,
+          "simple_avg_prob": 0.00015020856517367065,
+          "pred_label": 0,
+          "num_bags": 18
+        },
+        {
+          "filename": "TC_04_4415.npy",
+          "true_label": 0,
+          "weighted_prob": 3.272544973942758e-06,
+          "simple_avg_prob": 3.274390072268337e-06,
+          "pred_label": 0,
+          "num_bags": 12
+        },
+        {
+          "filename": "TC_04_4047.npy",
+          "true_label": 0,
+          "weighted_prob": 8.420466249553754e-06,
+          "simple_avg_prob": 8.423251878971663e-06,
+          "pred_label": 0,
+          "num_bags": 13
+        }
+      ]
+    },
+    {
+      "fold": 2,
+      "accuracy": 0.5,
+      "auc": 0.645,
+      "best_val_auc": 0.5780689964157706,
+      "test_wsis": [
+        "TC_04_2980.npy",
+        "TC_04_0645.npy",
+        "TC_04_7410.npy",
+        "TC_04_2110.npy",
+        "TC_04_2014.npy",
+        "TC_04_5079.npy",
+        "TC_04_7457.npy",
+        "TC_04_4678.npy",
+        "TC_04_7503.npy",
+        "TC_04_1673.npy",
+        "TC_04_3574.npy",
+        "TC_04_4741.npy",
+        "TC_04_7964.npy",
+        "TC_04_7229.npy",
+        "TC_04_7880.npy",
+        "TC_04_1414.npy",
+        "TC_04_2210.npy",
+        "TC_04_3514.npy",
+        "TC_04_4821.npy",
+        "TC_04_4264.npy",
+        "TC_04_7723.npy",
+        "TC_04_0577.npy",
+        "TC_04_4550.npy",
+        "TC_04_7076.npy",
+        "TC_04_6515.npy",
+        "TC_04_0825.npy",
+        "TC_04_0690.npy",
+        "TC_04_1315.npy",
+        "TC_04_5732.npy",
+        "TC_04_4137.npy",
+        "TC_04_1392.npy",
+        "TC_04_0655.npy",
+        "TC_04_0782.npy",
+        "TC_04_3502.npy",
+        "TC_04_3499.npy",
+        "TC_04_1374.npy",
+        "TC_04_7986.npy",
+        "TC_04_3402.npy",
+        "TC_04_2415.npy",
+        "TC_04_3304.npy"
+      ],
+      "test_results": [
+        {
+          "filename": "TC_04_5079.npy",
+          "true_label": 1,
+          "weighted_prob": 0.006529850566981762,
+          "simple_avg_prob": 0.006553876344696619,
+          "pred_label": 0,
+          "num_bags": 16
+        },
+        {
+          "filename": "TC_04_0645.npy",
+          "true_label": 1,
+          "weighted_prob": 1.5421356026645946e-05,
+          "simple_avg_prob": 1.5428117049768016e-05,
+          "pred_label": 0,
+          "num_bags": 11
+        },
+        {
+          "filename": "TC_04_1673.npy",
+          "true_label": 1,
+          "weighted_prob": 1.4552150749495022e-05,
+          "simple_avg_prob": 1.4687730526929954e-05,
+          "pred_label": 0,
+          "num_bags": 9
+        },
+        {
+          "filename": "TC_04_4741.npy",
+          "true_label": 1,
+          "weighted_prob": 0.0004584818302567956,
+          "simple_avg_prob": 0.000459046659671003,
+          "pred_label": 0,
+          "num_bags": 12
+        },
+        {
+          "filename": "TC_04_2110.npy",
+          "true_label": 1,
+          "weighted_prob": 3.986818149687161e-05,
+          "simple_avg_prob": 3.998969340399425e-05,
+          "pred_label": 0,
+          "num_bags": 18
+        },
+        {
+          "filename": "TC_04_7880.npy",
+          "true_label": 1,
+          "weighted_prob": 0.0002760778841087381,
+          "simple_avg_prob": 0.000275625657065705,
+          "pred_label": 0,
+          "num_bags": 7
+        },
+        {
+          "filename": "TC_04_2210.npy",
+          "true_label": 1,
+          "weighted_prob": 2.9137693911341814e-05,
+          "simple_avg_prob": 2.9132187592040282e-05,
+          "pred_label": 0,
+          "num_bags": 6
+        },
+        {
+          "filename": "TC_04_7229.npy",
+          "true_label": 1,
+          "weighted_prob": 0.00030517241915454217,
+          "simple_avg_prob": 0.0003058395877815201,
+          "pred_label": 0,
+          "num_bags": 10
+        },
+        {
+          "filename": "TC_04_7410.npy",
+          "true_label": 1,
+          "weighted_prob": 0.00013950090027361437,
+          "simple_avg_prob": 0.000139603598654503,
+          "pred_label": 0,
+          "num_bags": 12
+        },
+        {
+          "filename": "TC_04_4821.npy",
+          "true_label": 1,
+          "weighted_prob": 0.0006145891722859976,
+          "simple_avg_prob": 0.0006148019297556443,
+          "pred_label": 0,
+          "num_bags": 11
+        },
+        {
+          "filename": "TC_04_3514.npy",
+          "true_label": 1,
+          "weighted_prob": 0.0090404670448971,
+          "simple_avg_prob": 0.009069785325075774,
+          "pred_label": 0,
+          "num_bags": 17
+        },
+        {
+          "filename": "TC_04_2980.npy",
+          "true_label": 1,
+          "weighted_prob": 7.522768241398018e-06,
+          "simple_avg_prob": 7.522060693525801e-06,
+          "pred_label": 0,
+          "num_bags": 19
+        },
+        {
+          "filename": "TC_04_7457.npy",
+          "true_label": 1,
+          "weighted_prob": 7.305814950361327e-05,
+          "simple_avg_prob": 7.311101077133432e-05,
+          "pred_label": 0,
+          "num_bags": 13
+        },
+        {
+          "filename": "TC_04_4678.npy",
+          "true_label": 1,
+          "weighted_prob": 0.0018133679292361721,
+          "simple_avg_prob": 0.0018149412862840109,
+          "pred_label": 0,
+          "num_bags": 8
+        },
+        {
+          "filename": "TC_04_7964.npy",
+          "true_label": 1,
+          "weighted_prob": 4.146806163887381e-05,
+          "simple_avg_prob": 4.150436115406382e-05,
+          "pred_label": 0,
+          "num_bags": 13
+        },
+        {
+          "filename": "TC_04_1414.npy",
+          "true_label": 1,
+          "weighted_prob": 5.253038187757177e-05,
+          "simple_avg_prob": 5.255503648576061e-05,
+          "pred_label": 0,
+          "num_bags": 7
+        },
+        {
+          "filename": "TC_04_2014.npy",
+          "true_label": 1,
+          "weighted_prob": 1.6719775750709096e-05,
+          "simple_avg_prob": 1.6736223086708276e-05,
+          "pred_label": 0,
+          "num_bags": 9
+        },
+        {
+          "filename": "TC_04_7503.npy",
+          "true_label": 1,
+          "weighted_prob": 1.9876423052316656e-05,
+          "simple_avg_prob": 1.9903953216271475e-05,
+          "pred_label": 0,
+          "num_bags": 12
+        },
+        {
+          "filename": "TC_04_3574.npy",
+          "true_label": 1,
+          "weighted_prob": 0.000516825527649916,
+          "simple_avg_prob": 0.0005179772299015895,
+          "pred_label": 0,
+          "num_bags": 15
+        },
+        {
+          "filename": "TC_04_4264.npy",
+          "true_label": 1,
+          "weighted_prob": 0.001740745865114579,
+          "simple_avg_prob": 0.001742210960946977,
+          "pred_label": 0,
+          "num_bags": 10
+        },
+        {
+          "filename": "TC_04_4550.npy",
+          "true_label": 0,
+          "weighted_prob": 0.00033087362687625325,
+          "simple_avg_prob": 0.00033124868393012247,
+          "pred_label": 0,
+          "num_bags": 12
+        },
+        {
+          "filename": "TC_04_0577.npy",
+          "true_label": 0,
+          "weighted_prob": 2.7026863414119364e-05,
+          "simple_avg_prob": 2.7033869628212415e-05,
+          "pred_label": 0,
+          "num_bags": 5
+        },
+        {
+          "filename": "TC_04_1315.npy",
+          "true_label": 0,
+          "weighted_prob": 0.0004927000804314632,
+          "simple_avg_prob": 0.0004934012886224082,
+          "pred_label": 0,
+          "num_bags": 8
+        },
+        {
+          "filename": "TC_04_4137.npy",
+          "true_label": 0,
+          "weighted_prob": 1.204685246554659e-05,
+          "simple_avg_prob": 1.2112918739148881e-05,
+          "pred_label": 0,
+          "num_bags": 13
+        },
+        {
+          "filename": "TC_04_1374.npy",
+          "true_label": 0,
+          "weighted_prob": 0.00022106122529032675,
+          "simple_avg_prob": 0.00022278929100139067,
+          "pred_label": 0,
+          "num_bags": 4
+        },
+        {
+          "filename": "TC_04_1392.npy",
+          "true_label": 0,
+          "weighted_prob": 3.4807865344570164e-05,
+          "simple_avg_prob": 3.484616195237322e-05,
+          "pred_label": 0,
+          "num_bags": 8
+        },
+        {
+          "filename": "TC_04_7076.npy",
+          "true_label": 0,
+          "weighted_prob": 0.001279020619837814,
+          "simple_avg_prob": 0.0012788187110951792,
+          "pred_label": 0,
+          "num_bags": 15
+        },
+        {
+          "filename": "TC_04_6515.npy",
+          "true_label": 0,
+          "weighted_prob": 1.7843511589710724e-05,
+          "simple_avg_prob": 1.7851364256265307e-05,
+          "pred_label": 0,
+          "num_bags": 14
+        },
+        {
+          "filename": "TC_04_2415.npy",
+          "true_label": 0,
+          "weighted_prob": 0.0002632198258751615,
+          "simple_avg_prob": 0.0002634147117772189,
+          "pred_label": 0,
+          "num_bags": 19
+        },
+        {
+          "filename": "TC_04_7986.npy",
+          "true_label": 0,
+          "weighted_prob": 1.1343596884055644e-05,
+          "simple_avg_prob": 1.1332088348581237e-05,
+          "pred_label": 0,
+          "num_bags": 16
+        },
+        {
+          "filename": "TC_04_3402.npy",
+          "true_label": 0,
+          "weighted_prob": 0.00029298845607691624,
+          "simple_avg_prob": 0.00029316024509690967,
+          "pred_label": 0,
+          "num_bags": 14
+        },
+        {
+          "filename": "TC_04_3502.npy",
+          "true_label": 0,
+          "weighted_prob": 0.00030991729146617817,
+          "simple_avg_prob": 0.00030968361352279317,
+          "pred_label": 0,
+          "num_bags": 8
+        },
+        {
+          "filename": "TC_04_0782.npy",
+          "true_label": 0,
+          "weighted_prob": 3.9852794227898554e-05,
+          "simple_avg_prob": 3.992967919787459e-05,
+          "pred_label": 0,
+          "num_bags": 7
+        },
+        {
+          "filename": "TC_04_7723.npy",
+          "true_label": 0,
+          "weighted_prob": 4.434210021741121e-06,
+          "simple_avg_prob": 4.433371406562133e-06,
+          "pred_label": 0,
+          "num_bags": 17
+        },
+        {
+          "filename": "TC_04_0655.npy",
+          "true_label": 0,
+          "weighted_prob": 1.5331870317983316e-06,
+          "simple_avg_prob": 1.5327461824199418e-06,
+          "pred_label": 0,
+          "num_bags": 6
+        },
+        {
+          "filename": "TC_04_3499.npy",
+          "true_label": 0,
+          "weighted_prob": 0.00018222343313034853,
+          "simple_avg_prob": 0.0001829528927748256,
+          "pred_label": 0,
+          "num_bags": 17
+        },
+        {
+          "filename": "TC_04_0825.npy",
+          "true_label": 0,
+          "weighted_prob": 1.9716049070085684e-05,
+          "simple_avg_prob": 1.9601106859309684e-05,
+          "pred_label": 0,
+          "num_bags": 11
+        },
+        {
+          "filename": "TC_04_3304.npy",
+          "true_label": 0,
+          "weighted_prob": 0.00036843024169963686,
+          "simple_avg_prob": 0.00036917330496515587,
+          "pred_label": 0,
+          "num_bags": 19
+        },
+        {
+          "filename": "TC_04_5732.npy",
+          "true_label": 0,
+          "weighted_prob": 1.088360343574062e-05,
+          "simple_avg_prob": 1.0890450653278094e-05,
+          "pred_label": 0,
+          "num_bags": 8
+        },
+        {
+          "filename": "TC_04_0690.npy",
+          "true_label": 0,
+          "weighted_prob": 4.083441653348595e-06,
+          "simple_avg_prob": 4.091409815979811e-06,
+          "pred_label": 0,
+          "num_bags": 6
+        }
+      ]
+    },
+    {
+      "fold": 3,
+      "accuracy": 0.5,
+      "auc": 0.5775,
+      "best_val_auc": 0.7048027308089226,
+      "test_wsis": [
+        "TC_04_5719.npy",
+        "TC_04_5492.npy",
+        "TC_04_6910.npy",
+        "TC_04_5307.npy",
+        "TC_04_7900.npy",
+        "TC_04_3990.npy",
+        "TC_04_3427.npy",
+        "TC_04_1593.npy",
+        "TC_04_2640.npy",
+        "TC_04_6251.npy",
+        "TC_04_6283.npy",
+        "TC_04_3481.npy",
+        "TC_04_4353.npy",
+        "TC_04_6906.npy",
+        "TC_04_0979.npy",
+        "TC_04_1600.npy",
+        "TC_04_2871.npy",
+        "TC_04_6157.npy",
+        "TC_04_3082.npy",
+        "TC_04_4136.npy",
+        "TC_04_2946.npy",
+        "TC_04_2928.npy",
+        "TC_04_4427.npy",
+        "TC_04_6181.npy",
+        "TC_04_3308.npy",
+        "TC_04_1204.npy",
+        "TC_04_0752.npy",
+        "TC_04_7132.npy",
+        "TC_04_7965.npy",
+        "TC_04_1056.npy",
+        "TC_04_4708.npy",
+        "TC_04_6652.npy",
+        "TC_04_1613.npy",
+        "TC_04_1705.npy",
+        "TC_04_3103.npy",
+        "TC_04_4059.npy",
+        "TC_04_3021.npy",
+        "TC_04_3143.npy",
+        "TC_04_6003.npy",
+        "TC_04_4779.npy"
+      ],
+      "test_results": [
+        {
+          "filename": "TC_04_7900.npy",
+          "true_label": 1,
+          "weighted_prob": 0.005501313899364983,
+          "simple_avg_prob": 0.005505061506604155,
+          "pred_label": 0,
+          "num_bags": 15
+        },
+        {
+          "filename": "TC_04_4136.npy",
+          "true_label": 1,
+          "weighted_prob": 0.000130712779918348,
+          "simple_avg_prob": 0.00013098587948791516,
+          "pred_label": 0,
+          "num_bags": 14
+        },
+        {
+          "filename": "TC_04_5719.npy",
+          "true_label": 1,
+          "weighted_prob": 0.00013792218691251505,
+          "simple_avg_prob": 0.0001382152207524461,
+          "pred_label": 0,
+          "num_bags": 17
+        },
+        {
+          "filename": "TC_04_1600.npy",
+          "true_label": 1,
+          "weighted_prob": 7.889340566173584e-05,
+          "simple_avg_prob": 7.902705272044841e-05,
+          "pred_label": 0,
+          "num_bags": 10
+        },
+        {
+          "filename": "TC_04_5492.npy",
+          "true_label": 1,
+          "weighted_prob": 5.598176134842178e-06,
+          "simple_avg_prob": 5.6101353038684465e-06,
+          "pred_label": 0,
+          "num_bags": 11
+        },
+        {
+          "filename": "TC_04_5307.npy",
+          "true_label": 1,
+          "weighted_prob": 0.0007050532881056916,
+          "simple_avg_prob": 0.000704980012960732,
+          "pred_label": 0,
+          "num_bags": 15
+        },
+        {
+          "filename": "TC_04_6906.npy",
+          "true_label": 1,
+          "weighted_prob": 8.389143828240393e-05,
+          "simple_avg_prob": 8.445634064931558e-05,
+          "pred_label": 0,
+          "num_bags": 12
+        },
+        {
+          "filename": "TC_04_0979.npy",
+          "true_label": 1,
+          "weighted_prob": 0.0026485609683815975,
+          "simple_avg_prob": 0.002651430498060238,
+          "pred_label": 0,
+          "num_bags": 14
+        },
+        {
+          "filename": "TC_04_3990.npy",
+          "true_label": 1,
+          "weighted_prob": 0.0002487439523574154,
+          "simple_avg_prob": 0.0002488522688508965,
+          "pred_label": 0,
+          "num_bags": 10
+        },
+        {
+          "filename": "TC_04_4353.npy",
+          "true_label": 1,
+          "weighted_prob": 3.857789538279855e-05,
+          "simple_avg_prob": 3.896557461757766e-05,
+          "pred_label": 0,
+          "num_bags": 8
+        },
+        {
+          "filename": "TC_04_3082.npy",
+          "true_label": 1,
+          "weighted_prob": 2.4754693275979593e-05,
+          "simple_avg_prob": 2.4790545972387514e-05,
+          "pred_label": 0,
+          "num_bags": 9
+        },
+        {
+          "filename": "TC_04_6910.npy",
+          "true_label": 1,
+          "weighted_prob": 2.6860021461333765e-06,
+          "simple_avg_prob": 2.6967356916429708e-06,
+          "pred_label": 0,
+          "num_bags": 5
+        },
+        {
+          "filename": "TC_04_2871.npy",
+          "true_label": 1,
+          "weighted_prob": 4.65827659251862e-06,
+          "simple_avg_prob": 4.6624140200687436e-06,
+          "pred_label": 0,
+          "num_bags": 14
+        },
+        {
+          "filename": "TC_04_6283.npy",
+          "true_label": 1,
+          "weighted_prob": 0.0009630190747624178,
+          "simple_avg_prob": 0.0009638312621973455,
+          "pred_label": 0,
+          "num_bags": 10
+        },
+        {
+          "filename": "TC_04_6251.npy",
+          "true_label": 1,
+          "weighted_prob": 1.0023802052668311e-05,
+          "simple_avg_prob": 1.0027699858028427e-05,
+          "pred_label": 0,
+          "num_bags": 16
+        },
+        {
+          "filename": "TC_04_1593.npy",
+          "true_label": 1,
+          "weighted_prob": 2.8885833853850286e-05,
+          "simple_avg_prob": 2.8979755866616458e-05,
+          "pred_label": 0,
+          "num_bags": 11
+        },
+        {
+          "filename": "TC_04_6157.npy",
+          "true_label": 1,
+          "weighted_prob": 0.00011447464249199075,
+          "simple_avg_prob": 0.00011485560221794563,
+          "pred_label": 0,
+          "num_bags": 13
+        },
+        {
+          "filename": "TC_04_2640.npy",
+          "true_label": 1,
+          "weighted_prob": 0.00015066852798012516,
+          "simple_avg_prob": 0.00015120166369797516,
+          "pred_label": 0,
+          "num_bags": 16
+        },
+        {
+          "filename": "TC_04_3427.npy",
+          "true_label": 1,
+          "weighted_prob": 2.5034568234213106e-05,
+          "simple_avg_prob": 2.5056159150456853e-05,
+          "pred_label": 0,
+          "num_bags": 18
+        },
+        {
+          "filename": "TC_04_3481.npy",
+          "true_label": 1,
+          "weighted_prob": 0.00010275579709439604,
+          "simple_avg_prob": 0.00010277641413267702,
+          "pred_label": 0,
+          "num_bags": 10
+        },
+        {
+          "filename": "TC_04_3021.npy",
+          "true_label": 0,
+          "weighted_prob": 0.0003459320942311256,
+          "simple_avg_prob": 0.0003464260803108724,
+          "pred_label": 0,
+          "num_bags": 15
+        },
+        {
+          "filename": "TC_04_4427.npy",
+          "true_label": 0,
+          "weighted_prob": 8.77493019005899e-06,
+          "simple_avg_prob": 8.782054768137945e-06,
+          "pred_label": 0,
+          "num_bags": 9
+        },
+        {
+          "filename": "TC_04_3103.npy",
+          "true_label": 0,
+          "weighted_prob": 2.2500329056858867e-05,
+          "simple_avg_prob": 2.2532806777984233e-05,
+          "pred_label": 0,
+          "num_bags": 17
+        },
+        {
+          "filename": "TC_04_4779.npy",
+          "true_label": 0,
+          "weighted_prob": 0.00028136142622372455,
+          "simple_avg_prob": 0.00028176918931421824,
+          "pred_label": 0,
+          "num_bags": 10
+        },
+        {
+          "filename": "TC_04_3143.npy",
+          "true_label": 0,
+          "weighted_prob": 1.022026817734538e-05,
+          "simple_avg_prob": 1.0231033586803409e-05,
+          "pred_label": 0,
+          "num_bags": 14
+        },
+        {
+          "filename": "TC_04_1204.npy",
+          "true_label": 0,
+          "weighted_prob": 1.3098532180533155e-06,
+          "simple_avg_prob": 1.3141721792761828e-06,
+          "pred_label": 0,
+          "num_bags": 9
+        },
+        {
+          "filename": "TC_04_2928.npy",
+          "true_label": 0,
+          "weighted_prob": 1.4810276954273387e-05,
+          "simple_avg_prob": 1.4812485561479763e-05,
+          "pred_label": 0,
+          "num_bags": 18
+        },
+        {
+          "filename": "TC_04_0752.npy",
+          "true_label": 0,
+          "weighted_prob": 6.947346074533684e-07,
+          "simple_avg_prob": 6.943777748347202e-07,
+          "pred_label": 0,
+          "num_bags": 8
+        },
+        {
+          "filename": "TC_04_3308.npy",
+          "true_label": 0,
+          "weighted_prob": 0.001036602189732616,
+          "simple_avg_prob": 0.0010372060351073742,
+          "pred_label": 0,
+          "num_bags": 16
+        },
+        {
+          "filename": "TC_04_1056.npy",
+          "true_label": 0,
+          "weighted_prob": 2.51335715272941e-06,
+          "simple_avg_prob": 2.5130212049719247e-06,
+          "pred_label": 0,
+          "num_bags": 14
+        },
+        {
+          "filename": "TC_04_6652.npy",
+          "true_label": 0,
+          "weighted_prob": 0.00023824382325445263,
+          "simple_avg_prob": 0.0002383237690082751,
+          "pred_label": 0,
+          "num_bags": 10
+        },
+        {
+          "filename": "TC_04_1705.npy",
+          "true_label": 0,
+          "weighted_prob": 2.3407826260229288e-05,
+          "simple_avg_prob": 2.342811681696081e-05,
+          "pred_label": 0,
+          "num_bags": 7
+        },
+        {
+          "filename": "TC_04_6181.npy",
+          "true_label": 0,
+          "weighted_prob": 2.1522958651832187e-05,
+          "simple_avg_prob": 2.1492206542461645e-05,
+          "pred_label": 0,
+          "num_bags": 7
+        },
+        {
+          "filename": "TC_04_4708.npy",
+          "true_label": 0,
+          "weighted_prob": 9.34103459311609e-06,
+          "simple_avg_prob": 9.3326303840513e-06,
+          "pred_label": 0,
+          "num_bags": 8
+        },
+        {
+          "filename": "TC_04_1613.npy",
+          "true_label": 0,
+          "weighted_prob": 0.007749760924391651,
+          "simple_avg_prob": 0.007750360516919976,
+          "pred_label": 0,
+          "num_bags": 21
+        },
+        {
+          "filename": "TC_04_7965.npy",
+          "true_label": 0,
+          "weighted_prob": 4.6953020574966226e-05,
+          "simple_avg_prob": 4.69671027126929e-05,
+          "pred_label": 0,
+          "num_bags": 9
+        },
+        {
+          "filename": "TC_04_4059.npy",
+          "true_label": 0,
+          "weighted_prob": 5.473925164707557e-06,
+          "simple_avg_prob": 5.488519423124671e-06,
+          "pred_label": 0,
+          "num_bags": 10
+        },
+        {
+          "filename": "TC_04_6003.npy",
+          "true_label": 0,
+          "weighted_prob": 0.00924378749837446,
+          "simple_avg_prob": 0.009342845619418465,
+          "pred_label": 0,
+          "num_bags": 15
+        },
+        {
+          "filename": "TC_04_7132.npy",
+          "true_label": 0,
+          "weighted_prob": 5.628109189726006e-05,
+          "simple_avg_prob": 5.6471384114582394e-05,
+          "pred_label": 0,
+          "num_bags": 17
+        },
+        {
+          "filename": "TC_04_2946.npy",
+          "true_label": 0,
+          "weighted_prob": 0.04538494278863448,
+          "simple_avg_prob": 0.0454446088115219,
+          "pred_label": 0,
+          "num_bags": 18
+        }
+      ]
+    },
+    {
+      "fold": 4,
+      "accuracy": 0.5,
+      "auc": 0.6,
+      "best_val_auc": 0.6094195461284068,
+      "test_wsis": [
+        "TC_04_7953.npy",
+        "TC_04_4549.npy",
+        "TC_04_4884.npy",
+        "TC_04_5126.npy",
+        "TC_04_4042.npy",
+        "TC_04_4912.npy",
+        "TC_04_5427.npy",
+        "TC_04_2279.npy",
+        "TC_04_3798.npy",
+        "TC_04_1768.npy",
+        "TC_04_2846.npy",
+        "TC_04_2840.npy",
+        "TC_04_1350.npy",
+        "TC_04_3451.npy",
+        "TC_04_0996.npy",
+        "TC_04_4166.npy",
+        "TC_04_4914.npy",
+        "TC_04_4612.npy",
+        "TC_04_6152.npy",
+        "TC_04_3712.npy",
+        "TC_04_3460.npy",
+        "TC_04_6581.npy",
+        "TC_04_3046.npy",
+        "TC_04_2867.npy",
+        "TC_04_3873.npy",
+        "TC_04_6672.npy",
+        "TC_04_4979.npy",
+        "TC_04_1776.npy",
+        "TC_04_3756.npy",
+        "TC_04_3911.npy",
+        "TC_04_5188.npy",
+        "TC_04_3921.npy",
+        "TC_04_6827.npy",
+        "TC_04_6099.npy",
+        "TC_04_3716.npy",
+        "TC_04_1964.npy",
+        "TC_04_2128.npy",
+        "TC_04_3386.npy",
+        "TC_04_0964.npy",
+        "TC_04_3624.npy"
+      ],
+      "test_results": [
+        {
+          "filename": "TC_04_6152.npy",
+          "true_label": 1,
+          "weighted_prob": 0.0005072839647506833,
+          "simple_avg_prob": 0.0005074686725327575,
+          "pred_label": 0,
+          "num_bags": 11
+        },
+        {
+          "filename": "TC_04_3451.npy",
+          "true_label": 1,
+          "weighted_prob": 1.5905007534651052e-05,
+          "simple_avg_prob": 1.591090580177479e-05,
+          "pred_label": 0,
+          "num_bags": 16
+        },
+        {
+          "filename": "TC_04_1350.npy",
+          "true_label": 1,
+          "weighted_prob": 5.1450534683388e-05,
+          "simple_avg_prob": 5.145630645777353e-05,
+          "pred_label": 0,
+          "num_bags": 11
+        },
+        {
+          "filename": "TC_04_2846.npy",
+          "true_label": 1,
+          "weighted_prob": 9.536836289459112e-06,
+          "simple_avg_prob": 9.541560477653267e-06,
+          "pred_label": 0,
+          "num_bags": 13
+        },
+        {
+          "filename": "TC_04_3712.npy",
+          "true_label": 1,
+          "weighted_prob": 6.539376812247571e-06,
+          "simple_avg_prob": 6.539900454072267e-06,
+          "pred_label": 0,
+          "num_bags": 16
+        },
+        {
+          "filename": "TC_04_4612.npy",
+          "true_label": 1,
+          "weighted_prob": 0.00010482843339488308,
+          "simple_avg_prob": 0.00010488400473080289,
+          "pred_label": 0,
+          "num_bags": 13
+        },
+        {
+          "filename": "TC_04_5126.npy",
+          "true_label": 1,
+          "weighted_prob": 0.0002851826735917718,
+          "simple_avg_prob": 0.00028531349380500615,
+          "pred_label": 0,
+          "num_bags": 13
+        },
+        {
+          "filename": "TC_04_4914.npy",
+          "true_label": 1,
+          "weighted_prob": 2.353078377648204e-05,
+          "simple_avg_prob": 2.353595664317254e-05,
+          "pred_label": 0,
+          "num_bags": 12
+        },
+        {
+          "filename": "TC_04_1768.npy",
+          "true_label": 1,
+          "weighted_prob": 5.325322488912173e-05,
+          "simple_avg_prob": 5.3267682233126834e-05,
+          "pred_label": 0,
+          "num_bags": 14
+        },
+        {
+          "filename": "TC_04_7953.npy",
+          "true_label": 1,
+          "weighted_prob": 0.0005144351337461866,
+          "simple_avg_prob": 0.000514519469496528,
+          "pred_label": 0,
+          "num_bags": 14
+        },
+        {
+          "filename": "TC_04_4042.npy",
+          "true_label": 1,
+          "weighted_prob": 1.0814422838187236e-05,
+          "simple_avg_prob": 1.0816315302185507e-05,
+          "pred_label": 0,
+          "num_bags": 9
+        },
+        {
+          "filename": "TC_04_2840.npy",
+          "true_label": 1,
+          "weighted_prob": 6.4811433187740444e-06,
+          "simple_avg_prob": 6.487207429017872e-06,
+          "pred_label": 0,
+          "num_bags": 19
+        },
+        {
+          "filename": "TC_04_4912.npy",
+          "true_label": 1,
+          "weighted_prob": 0.0002905812665188865,
+          "simple_avg_prob": 0.00029063526308164,
+          "pred_label": 0,
+          "num_bags": 15
+        },
+        {
+          "filename": "TC_04_0996.npy",
+          "true_label": 1,
+          "weighted_prob": 1.8035511687136722e-05,
+          "simple_avg_prob": 1.804413808382709e-05,
+          "pred_label": 0,
+          "num_bags": 11
+        },
+        {
+          "filename": "TC_04_3798.npy",
+          "true_label": 1,
+          "weighted_prob": 2.1634548826270342e-05,
+          "simple_avg_prob": 2.1638870384776966e-05,
+          "pred_label": 0,
+          "num_bags": 10
+        },
+        {
+          "filename": "TC_04_4549.npy",
+          "true_label": 1,
+          "weighted_prob": 8.835553713828524e-06,
+          "simple_avg_prob": 8.840108762342425e-06,
+          "pred_label": 0,
+          "num_bags": 8
+        },
+        {
+          "filename": "TC_04_4884.npy",
+          "true_label": 1,
+          "weighted_prob": 2.1883197793549917e-05,
+          "simple_avg_prob": 2.1889580881072426e-05,
+          "pred_label": 0,
+          "num_bags": 17
+        },
+        {
+          "filename": "TC_04_5427.npy",
+          "true_label": 1,
+          "weighted_prob": 0.00026669434543142147,
+          "simple_avg_prob": 0.00026676957906388184,
+          "pred_label": 0,
+          "num_bags": 17
+        },
+        {
+          "filename": "TC_04_2279.npy",
+          "true_label": 1,
+          "weighted_prob": 0.00022204284309482517,
+          "simple_avg_prob": 0.00022210998577065766,
+          "pred_label": 0,
+          "num_bags": 11
+        },
+        {
+          "filename": "TC_04_4166.npy",
+          "true_label": 1,
+          "weighted_prob": 1.657495614489972e-05,
+          "simple_avg_prob": 1.6576107009314e-05,
+          "pred_label": 0,
+          "num_bags": 5
+        },
+        {
+          "filename": "TC_04_3756.npy",
+          "true_label": 0,
+          "weighted_prob": 2.614136571627202e-05,
+          "simple_avg_prob": 2.6147780711956633e-05,
+          "pred_label": 0,
+          "num_bags": 15
+        },
+        {
+          "filename": "TC_04_3873.npy",
+          "true_label": 0,
+          "weighted_prob": 3.460502275423188e-05,
+          "simple_avg_prob": 3.461224254611547e-05,
+          "pred_label": 0,
+          "num_bags": 14
+        },
+        {
+          "filename": "TC_04_3716.npy",
+          "true_label": 0,
+          "weighted_prob": 7.698342782225315e-06,
+          "simple_avg_prob": 7.700000120773135e-06,
+          "pred_label": 0,
+          "num_bags": 9
+        },
+        {
+          "filename": "TC_04_1776.npy",
+          "true_label": 0,
+          "weighted_prob": 1.5594480339700286e-05,
+          "simple_avg_prob": 1.5598140180372866e-05,
+          "pred_label": 0,
+          "num_bags": 10
+        },
+        {
+          "filename": "TC_04_5188.npy",
+          "true_label": 0,
+          "weighted_prob": 0.001074511446391059,
+          "simple_avg_prob": 0.0010770200322823304,
+          "pred_label": 0,
+          "num_bags": 19
+        },
+        {
+          "filename": "TC_04_1964.npy",
+          "true_label": 0,
+          "weighted_prob": 2.3925373346116896e-05,
+          "simple_avg_prob": 2.3932951535243774e-05,
+          "pred_label": 0,
+          "num_bags": 16
+        },
+        {
+          "filename": "TC_04_3460.npy",
+          "true_label": 0,
+          "weighted_prob": 2.158898050264145e-06,
+          "simple_avg_prob": 2.1596055982323985e-06,
+          "pred_label": 0,
+          "num_bags": 15
+        },
+        {
+          "filename": "TC_04_3386.npy",
+          "true_label": 0,
+          "weighted_prob": 1.3374071014021815e-06,
+          "simple_avg_prob": 1.337682981272792e-06,
+          "pred_label": 0,
+          "num_bags": 16
+        },
+        {
+          "filename": "TC_04_0964.npy",
+          "true_label": 0,
+          "weighted_prob": 0.00016209808914378654,
+          "simple_avg_prob": 0.00016214221335865338,
+          "pred_label": 0,
+          "num_bags": 17
+        },
+        {
+          "filename": "TC_04_3624.npy",
+          "true_label": 0,
+          "weighted_prob": 7.3751853829290374e-06,
+          "simple_avg_prob": 7.3756783649514546e-06,
+          "pred_label": 0,
+          "num_bags": 4
+        },
+        {
+          "filename": "TC_04_6672.npy",
+          "true_label": 0,
+          "weighted_prob": 8.601321407364655e-05,
+          "simple_avg_prob": 8.607891595602268e-05,
+          "pred_label": 0,
+          "num_bags": 8
+        },
+        {
+          "filename": "TC_04_6581.npy",
+          "true_label": 0,
+          "weighted_prob": 0.0004008762972111211,
+          "simple_avg_prob": 0.00040099016457263915,
+          "pred_label": 0,
+          "num_bags": 7
+        },
+        {
+          "filename": "TC_04_4979.npy",
+          "true_label": 0,
+          "weighted_prob": 3.324527025752405e-05,
+          "simple_avg_prob": 3.3267408677299194e-05,
+          "pred_label": 0,
+          "num_bags": 12
+        },
+        {
+          "filename": "TC_04_2867.npy",
+          "true_label": 0,
+          "weighted_prob": 3.392513856440101e-05,
+          "simple_avg_prob": 3.394342828952094e-05,
+          "pred_label": 0,
+          "num_bags": 22
+        },
+        {
+          "filename": "TC_04_3046.npy",
+          "true_label": 0,
+          "weighted_prob": 3.828662247672517e-06,
+          "simple_avg_prob": 3.8291786950139794e-06,
+          "pred_label": 0,
+          "num_bags": 13
+        },
+        {
+          "filename": "TC_04_6099.npy",
+          "true_label": 0,
+          "weighted_prob": 1.1211030761539185e-05,
+          "simple_avg_prob": 1.1219824255721715e-05,
+          "pred_label": 0,
+          "num_bags": 13
+        },
+        {
+          "filename": "TC_04_2128.npy",
+          "true_label": 0,
+          "weighted_prob": 3.58076643824411e-05,
+          "simple_avg_prob": 3.5817719132561855e-05,
+          "pred_label": 0,
+          "num_bags": 9
+        },
+        {
+          "filename": "TC_04_3911.npy",
+          "true_label": 0,
+          "weighted_prob": 2.646315957308481e-06,
+          "simple_avg_prob": 2.6470777925169386e-06,
+          "pred_label": 0,
+          "num_bags": 12
+        },
+        {
+          "filename": "TC_04_3921.npy",
+          "true_label": 0,
+          "weighted_prob": 7.269417388907215e-06,
+          "simple_avg_prob": 7.2723292987575405e-06,
+          "pred_label": 0,
+          "num_bags": 4
+        },
+        {
+          "filename": "TC_04_6827.npy",
+          "true_label": 0,
+          "weighted_prob": 6.52055364049662e-05,
+          "simple_avg_prob": 6.525221912549266e-05,
+          "pred_label": 0,
+          "num_bags": 12
+        }
+      ]
+    },
+    {
+      "fold": 5,
+      "accuracy": 0.55,
+      "auc": 0.65875,
+      "best_val_auc": 0.5706761210056651,
+      "test_wsis": [
+        "TC_04_1903.npy",
+        "TC_04_4916.npy",
+        "TC_04_6279.npy",
+        "TC_04_4305.npy",
+        "TC_04_7981.npy",
+        "TC_04_3004.npy",
+        "TC_04_6401.npy",
+        "TC_04_1551.npy",
+        "TC_04_4286.npy",
+        "TC_04_4753.npy",
+        "TC_04_1657.npy",
+        "TC_04_7093.npy",
+        "TC_04_5765.npy",
+        "TC_04_7039.npy",
+        "TC_04_1532.npy",
+        "TC_04_5701.npy",
+        "TC_04_6459.npy",
+        "TC_04_4805.npy",
+        "TC_04_0766.npy",
+        "TC_04_1716.npy",
+        "TC_04_3066.npy",
+        "TC_04_5415.npy",
+        "TC_04_1165.npy",
+        "TC_04_3963.npy",
+        "TC_04_2619.npy",
+        "TC_04_4771.npy",
+        "TC_04_3166.npy",
+        "TC_04_4676.npy",
+        "TC_04_0961.npy",
+        "TC_04_0558.npy",
+        "TC_04_3818.npy",
+        "TC_04_6296.npy",
+        "TC_04_3724.npy",
+        "TC_04_3216.npy",
+        "TC_04_1536.npy",
+        "TC_04_5708.npy",
+        "TC_04_4330.npy",
+        "TC_04_3298.npy",
+        "TC_04_5345.npy",
+        "TC_04_5041.npy"
+      ],
+      "test_results": [
+        {
+          "filename": "TC_04_4916.npy",
+          "true_label": 1,
+          "weighted_prob": 0.0024316160038879713,
+          "simple_avg_prob": 0.0023833130369614363,
+          "pred_label": 0,
+          "num_bags": 13
+        },
+        {
+          "filename": "TC_04_7039.npy",
+          "true_label": 1,
+          "weighted_prob": 0.9999999999999999,
+          "simple_avg_prob": 1.0,
+          "pred_label": 1,
+          "num_bags": 10
+        },
+        {
+          "filename": "TC_04_7093.npy",
+          "true_label": 1,
+          "weighted_prob": 0.007707381928107116,
+          "simple_avg_prob": 0.007647067525734504,
+          "pred_label": 0,
+          "num_bags": 15
+        },
+        {
+          "filename": "TC_04_7981.npy",
+          "true_label": 1,
+          "weighted_prob": 0.09123968637140933,
+          "simple_avg_prob": 0.09123968637140933,
+          "pred_label": 0,
+          "num_bags": 10
+        },
+        {
+          "filename": "TC_04_3004.npy",
+          "true_label": 1,
+          "weighted_prob": 1.3620352631559967e-06,
+          "simple_avg_prob": 1.375624562408954e-06,
+          "pred_label": 0,
+          "num_bags": 6
+        },
+        {
+          "filename": "TC_04_1903.npy",
+          "true_label": 1,
+          "weighted_prob": 2.3089669984338255e-06,
+          "simple_avg_prob": 2.297815223590243e-06,
+          "pred_label": 0,
+          "num_bags": 11
+        },
+        {
+          "filename": "TC_04_1657.npy",
+          "true_label": 1,
+          "weighted_prob": 0.986349213715358,
+          "simple_avg_prob": 0.9790391789542304,
+          "pred_label": 1,
+          "num_bags": 18
+        },
+        {
+          "filename": "TC_04_6279.npy",
+          "true_label": 1,
+          "weighted_prob": 0.8020176073270184,
+          "simple_avg_prob": 0.8020176073270184,
+          "pred_label": 1,
+          "num_bags": 7
+        },
+        {
+          "filename": "TC_04_1532.npy",
+          "true_label": 1,
+          "weighted_prob": 2.5592369906253984e-06,
+          "simple_avg_prob": 2.5592369906253984e-06,
+          "pred_label": 0,
+          "num_bags": 12
+        },
+        {
+          "filename": "TC_04_4305.npy",
+          "true_label": 1,
+          "weighted_prob": 8.901156889563739e-05,
+          "simple_avg_prob": 8.985505216211702e-05,
+          "pred_label": 0,
+          "num_bags": 9
+        },
+        {
+          "filename": "TC_04_1551.npy",
+          "true_label": 1,
+          "weighted_prob": 6.43154156254405e-07,
+          "simple_avg_prob": 6.465312002939588e-07,
+          "pred_label": 0,
+          "num_bags": 11
+        },
+        {
+          "filename": "TC_04_4286.npy",
+          "true_label": 1,
+          "weighted_prob": 0.008978101538635505,
+          "simple_avg_prob": 0.008978101538635505,
+          "pred_label": 0,
+          "num_bags": 12
+        },
+        {
+          "filename": "TC_04_6459.npy",
+          "true_label": 1,
+          "weighted_prob": 2.720115976002112e-05,
+          "simple_avg_prob": 2.7318466988747658e-05,
+          "pred_label": 0,
+          "num_bags": 14
+        },
+        {
+          "filename": "TC_04_4805.npy",
+          "true_label": 1,
+          "weighted_prob": 0.24221723609500462,
+          "simple_avg_prob": 0.24221723609500462,
+          "pred_label": 0,
+          "num_bags": 18
+        },
+        {
+          "filename": "TC_04_1716.npy",
+          "true_label": 1,
+          "weighted_prob": 1.0,
+          "simple_avg_prob": 1.0,
+          "pred_label": 1,
+          "num_bags": 10
+        },
+        {
+          "filename": "TC_04_4753.npy",
+          "true_label": 1,
+          "weighted_prob": 0.41265167370438577,
+          "simple_avg_prob": 0.41265167370438577,
+          "pred_label": 0,
+          "num_bags": 10
+        },
+        {
+          "filename": "TC_04_5701.npy",
+          "true_label": 1,
+          "weighted_prob": 0.9111063044804794,
+          "simple_avg_prob": 0.9111063044804794,
+          "pred_label": 1,
+          "num_bags": 13
+        },
+        {
+          "filename": "TC_04_5765.npy",
+          "true_label": 1,
+          "weighted_prob": 0.28096863684055146,
+          "simple_avg_prob": 0.2836794452741742,
+          "pred_label": 0,
+          "num_bags": 14
+        },
+        {
+          "filename": "TC_04_6401.npy",
+          "true_label": 1,
+          "weighted_prob": 0.7036620152493318,
+          "simple_avg_prob": 0.7036620152493318,
+          "pred_label": 1,
+          "num_bags": 15
+        },
+        {
+          "filename": "TC_04_0766.npy",
+          "true_label": 1,
+          "weighted_prob": 0.00017886515060025785,
+          "simple_avg_prob": 0.00017886515060025785,
+          "pred_label": 0,
+          "num_bags": 9
+        },
+        {
+          "filename": "TC_04_1165.npy",
+          "true_label": 0,
+          "weighted_prob": 1.3788666440786507e-08,
+          "simple_avg_prob": 1.3876851098770793e-08,
+          "pred_label": 0,
+          "num_bags": 9
+        },
+        {
+          "filename": "TC_04_3724.npy",
+          "true_label": 0,
+          "weighted_prob": 1.3034945326093629e-06,
+          "simple_avg_prob": 1.2978609780540346e-06,
+          "pred_label": 0,
+          "num_bags": 7
+        },
+        {
+          "filename": "TC_04_4771.npy",
+          "true_label": 0,
+          "weighted_prob": 0.3051656215362267,
+          "simple_avg_prob": 0.3051656215362267,
+          "pred_label": 0,
+          "num_bags": 7
+        },
+        {
+          "filename": "TC_04_5415.npy",
+          "true_label": 0,
+          "weighted_prob": 0.9951120879915025,
+          "simple_avg_prob": 0.9951120879915025,
+          "pred_label": 1,
+          "num_bags": 9
+        },
+        {
+          "filename": "TC_04_6296.npy",
+          "true_label": 0,
+          "weighted_prob": 1.0,
+          "simple_avg_prob": 1.0,
+          "pred_label": 1,
+          "num_bags": 14
+        },
+        {
+          "filename": "TC_04_4330.npy",
+          "true_label": 0,
+          "weighted_prob": 7.31508991998989e-10,
+          "simple_avg_prob": 7.305332450080471e-10,
+          "pred_label": 0,
+          "num_bags": 4
+        },
+        {
+          "filename": "TC_04_3963.npy",
+          "true_label": 0,
+          "weighted_prob": 0.002582430865408646,
+          "simple_avg_prob": 0.002582430865408646,
+          "pred_label": 0,
+          "num_bags": 9
+        },
+        {
+          "filename": "TC_04_5041.npy",
+          "true_label": 0,
+          "weighted_prob": 6.261397693663184e-08,
+          "simple_avg_prob": 6.261397693663184e-08,
+          "pred_label": 0,
+          "num_bags": 10
+        },
+        {
+          "filename": "TC_04_0961.npy",
+          "true_label": 0,
+          "weighted_prob": 0.29618859553514854,
+          "simple_avg_prob": 0.29618859553514854,
+          "pred_label": 0,
+          "num_bags": 13
+        },
+        {
+          "filename": "TC_04_3166.npy",
+          "true_label": 0,
+          "weighted_prob": 2.614584579194197e-08,
+          "simple_avg_prob": 2.6067637001351126e-08,
+          "pred_label": 0,
+          "num_bags": 14
+        },
+        {
+          "filename": "TC_04_5345.npy",
+          "true_label": 0,
+          "weighted_prob": 8.062474791944712e-09,
+          "simple_avg_prob": 8.091106320887654e-09,
+          "pred_label": 0,
+          "num_bags": 17
+        },
+        {
+          "filename": "TC_04_4676.npy",
+          "true_label": 0,
+          "weighted_prob": 0.0001716703884898491,
+          "simple_avg_prob": 0.00016920484354822444,
+          "pred_label": 0,
+          "num_bags": 15
+        },
+        {
+          "filename": "TC_04_3298.npy",
+          "true_label": 0,
+          "weighted_prob": 3.4984085585824236e-07,
+          "simple_avg_prob": 3.500505449949287e-07,
+          "pred_label": 0,
+          "num_bags": 8
+        },
+        {
+          "filename": "TC_04_2619.npy",
+          "true_label": 0,
+          "weighted_prob": 0.005445295326913206,
+          "simple_avg_prob": 0.005445295326913206,
+          "pred_label": 0,
+          "num_bags": 13
+        },
+        {
+          "filename": "TC_04_1536.npy",
+          "true_label": 0,
+          "weighted_prob": 0.04587997642617511,
+          "simple_avg_prob": 0.05707193277141249,
+          "pred_label": 0,
+          "num_bags": 11
+        },
+        {
+          "filename": "TC_04_5708.npy",
+          "true_label": 0,
+          "weighted_prob": 0.9175784058041043,
+          "simple_avg_prob": 0.9175784058041043,
+          "pred_label": 1,
+          "num_bags": 9
+        },
+        {
+          "filename": "TC_04_0558.npy",
+          "true_label": 0,
+          "weighted_prob": 2.871249803931854e-06,
+          "simple_avg_prob": 2.897898606793855e-06,
+          "pred_label": 0,
+          "num_bags": 7
+        },
+        {
+          "filename": "TC_04_3066.npy",
+          "true_label": 0,
+          "weighted_prob": 0.6390972808003426,
+          "simple_avg_prob": 0.6390972808003426,
+          "pred_label": 1,
+          "num_bags": 16
+        },
+        {
+          "filename": "TC_04_3818.npy",
+          "true_label": 0,
+          "weighted_prob": 7.609597606616325e-08,
+          "simple_avg_prob": 7.555054957710293e-08,
+          "pred_label": 0,
+          "num_bags": 13
+        },
+        {
+          "filename": "TC_04_3216.npy",
+          "true_label": 0,
+          "weighted_prob": 3.6635719886353854e-05,
+          "simple_avg_prob": 3.521787491855832e-05,
+          "pred_label": 0,
+          "num_bags": 17
+        }
+      ]
+    }
+  ]
+}

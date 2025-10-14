@@ -1,0 +1,94 @@
+# ABMIL Configuration for Thyroid BRAF Mutation Prediction
+# 논문에서 제안한 설정을 기반으로 작성
+
+# 데이터 설정
+data:
+  root: "/data/member/kwk/dl/thyroid/image/slide-v1-240412/patch/Train"
+  test_size: 0.2  # 20% for test
+  val_size: 0.1   # 10% for validation
+  random_state: 42
+
+# 모델 설정 (기존 abmil.py의 ABMIL 모델 사용)
+model:
+  name: "ABMIL"
+  gate: true           # Gated attention 사용
+  embed_dim: 512       # Embedding dimension
+  attn_dim: 384        # Attention dimension
+  num_fc_layers: 1     # FC layers in patch embedding
+  dropout: 0.25        # Dropout rate
+  in_dim: 1536         # UNI2 features dimension
+  num_classes: 2       # BRAF+/BRAF- classification
+  
+# 학습 설정
+training:
+  epochs: 100
+  batch_size: 1  # MIL typically uses batch_size=1
+  learning_rate: 1e-4
+  weight_decay: 1e-5
+  gradient_clip: 1.0
+  early_stopping:
+    patience: 15
+    min_delta: 0.001
+  
+# 스케줄러 설정
+scheduler:
+  type: "ReduceLROnPlateau"
+  mode: "min"
+  factor: 0.5
+  patience: 10
+  verbose: true
+
+# Cross Validation 설정
+cross_validation:
+  k_folds: 5
+  random_state: 42
+
+# 증강 설정 (논문의 few-shot learning strategy 참고)
+augmentation:
+  use_augmentation: false
+  rotation_range: 15
+  horizontal_flip: true
+  vertical_flip: true
+  brightness_range: [0.8, 1.2]
+  contrast_range: [0.8, 1.2]
+
+# 로깅 및 모니터링
+logging:
+  log_dir: "./logs"
+  save_interval: 10  # epochs
+  use_wandb: true
+  wandb:
+    project: "thyroid-braf-abmil"
+    entity: null  # your wandb username
+    tags: ["abmil", "thyroid", "braf", "mil"]
+
+# 저장 설정
+saving:
+  save_dir: "./results"
+  save_best_only: true
+  save_last: true
+  save_optimizer: true
+
+# 평가 설정
+evaluation:
+  metrics: ["accuracy", "auc", "precision", "recall", "f1"]
+  confusion_matrix: true
+  classification_report: true
+  
+# 하드웨어 설정
+hardware:
+  device: "auto"  # auto, cuda, cpu
+  num_workers: 3
+  pin_memory: true
+  
+# 실험 설정
+experiment:
+  name: "thyroid_braf_abmil"
+  description: "ABMIL for thyroid BRAF mutation prediction using UNI features"
+  version: "v1.0"
+  
+# 재현성 설정
+reproducibility:
+  seed: 42
+  deterministic: true
+  benchmark: false

@@ -1,0 +1,626 @@
+"""
+active_code
+
+CUDA_VISIBLE_DEVICES=3 \
+python train_bag.py \
+  --data_root /data/143/member/jks/Thyroid_Mutation_dataset/embeddings \
+  --model_save_dir /home/mts/ssd_16tb/member/jks/Thyroid_Mutation_model/outputs/Thyroid_prediction_model_v0.1.4 \
+  --cv_split_file /home/mts/ssd_16tb/member/jks/Thyroid_Mutation_model/src/utils/cv_splits/cv_splits_k5_seed42.json_v.0.1.0 \
+  --epochs 100 \
+  --lr 1e-5 \
+  --bag_size 2000 \
+  --seed 42 \
+  --save_model \
+  --save_best_only \
+  --debug
+"""
+
+import os
+import argparse
+import torch
+import torch.nn as nn
+import numpy as np
+from pathlib import Path
+from sklearn.metrics import (
+    accuracy_score, roc_auc_score, precision_score, recall_score, f1_score,
+    confusion_matrix
+)
+import warnings
+import sys
+import json
+
+warnings.filterwarnings('ignore')
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+src_dir = os.path.dirname(current_dir)
+sys.path.insert(0, src_dir)
+sys.path.append(os.path.join(src_dir, 'models'))
+
+from abmil import ABMILModel, ABMILGatedBaseConfig
+from utils.datasets import ThyroidWSIDataset, set_seed
+from utils.metrics import comprehensive_evaluation
+from torch.utils.data import DataLoader
+
+
+# =========================
+# EarlyStopping
+# =========================
+class EarlyStopping:
+    def __init__(self, patience=8, min_delta=0.001, restore_best_weights=True):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.restore_best_weights = restore_best_weights
+        self.best_score = None
+        self.counter = 0
+        self.best_weights = None
+
+    def __call__(self, score, model=None):
+        improved = False
+        if self.best_score is None:
+            self.best_score = score
+            improved = True
+        elif score > self.best_score + self.min_delta:
+            self.best_score = score
+            self.counter = 0
+            improved = True
+        else:
+            self.counter += 1
+
+        if improved and model is not None and self.restore_best_weights:
+            self.best_weights = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+
+        return self.counter >= self.patience
+
+    def restore_best(self, model):
+        if self.best_weights is not None:
+            model.load_state_dict(self.best_weights)
+
+
+# =========================
+# 지표 계산 함수
+# =========================
+def compute_metrics_with_confusion(y_true, y_pred, y_prob):
+    tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+
+    acc  = accuracy_score(y_true, y_pred)
+    auc  = roc_auc_score(y_true, y_prob) if len(set(y_true)) > 1 else 0.5
+    sens = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    spec = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+    ppv  = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    npv  = tn / (tn + fn) if (tn + fn) > 0 else 0.0
+    f1   = f1_score(y_true, y_pred, zero_division=0)
+
+    return {
+        "accuracy": acc,
+        "auc": auc,
+        "sensitivity": sens,
+        "specificity": spec,
+        "ppv": ppv,
+        "npv": npv,
+        "f1": f1,
+        "tp": int(tp),
+        "tn": int(tn),
+        "fp": int(fp),
+        "fn": int(fn)
+    }
+
+
+# =========================
+# Train / Val / Test 함수
+# =========================
+def run_one_epoch(model, dataloader, device, optimizer=None, train=False):
+    if train:
+        model.train()
+    else:
+        model.eval()
+
+    total_loss = 0
+    all_preds, all_labels, all_probs = [], [], []
+    loss_fn = nn.CrossEntropyLoss()
+
+    with torch.set_grad_enabled(train):
+        for features, label, filename in dataloader:
+            features = features.to(device)
+            label = label.to(device)
+
+            if train:
+                optimizer.zero_grad()
+                results_dict, _ = model(h=features, loss_fn=loss_fn, label=label)
+                loss = results_dict['loss']
+                logits = results_dict['logits']
+                loss.backward()
+                optimizer.step()
+            else:
+                results_dict, _ = model(h=features, loss_fn=loss_fn, label=label)
+                loss = results_dict['loss']
+                logits = results_dict['logits']
+
+            total_loss += loss.item()
+            probs = torch.softmax(logits, dim=1)[:, 1]
+            preds = torch.argmax(logits, dim=1)
+
+            all_probs.extend(probs.cpu().detach().numpy())
+            all_preds.extend(preds.cpu().numpy())
+            all_labels.extend(label.cpu().numpy())
+
+    avg_loss = total_loss / len(dataloader) if len(dataloader) > 0 else 0
+
+    if len(set(all_labels)) > 1:
+        metrics = compute_metrics_with_confusion(all_labels, all_preds, all_probs)
+    else:
+        metrics = {
+            "accuracy": 0.0, "auc": 0.5,
+            "sensitivity": 0.0, "specificity": 0.0,
+            "ppv": 0.0, "npv": 0.0,
+            "f1": 0.0, "tp": 0, "tn": 0, "fp": 0, "fn": 0
+        }
+
+    metrics["loss"] = avg_loss
+    return metrics
+
+
+def evaluate_model(model, dataloader, device):
+    model.eval()
+    all_probs, all_labels, all_preds = [], [], []
+    with torch.no_grad():
+        for features, label, filename in dataloader:
+            features = features.to(device)
+            label = label.to(device)
+            results_dict, _ = model(h=features, loss_fn=None, label=None)
+            logits = results_dict['logits']
+            probs = torch.softmax(logits, dim=1)[:, 1]
+            preds = torch.argmax(logits, dim=1)
+            all_probs.extend(probs.cpu().numpy())
+            all_preds.extend(preds.cpu().numpy())
+            all_labels.extend(label.cpu().numpy())
+    return all_probs, all_labels, all_preds
+
+
+# =========================
+# Print Fold Table
+# =========================
+def print_fold_table(fold_num, train_metrics, val_metrics, test_metrics):
+    """각 fold별 결과를 표 형태로 출력"""
+    print(f"\n{'='*80}")
+    print(f"Fold {fold_num} Results")
+    print(f"{'='*80}")
+    
+    print(f"| {'Set':8s} | {'Accuracy':8s} | {'AUC':8s} | {'Sensitivity':11s} | "
+          f"{'Specificity':11s} | {'Precision':9s} | {'NPV':8s} | {'F1-score':8s} |")
+    print("|" + "-"*10 + "|" + "-"*10 + "|" + "-"*10 + "|" + "-"*13 + "|" + 
+          "-"*13 + "|" + "-"*11 + "|" + "-"*10 + "|" + "-"*10 + "|")
+    
+    print(f"| {'Train':8s} | {train_metrics['accuracy']:8.2f} | "
+          f"{train_metrics['auc']:8.2f} | {train_metrics['sensitivity']:11.2f} | "
+          f"{train_metrics['specificity']:11.2f} | {train_metrics['ppv']:9.2f} | "
+          f"{train_metrics['npv']:8.2f} | {train_metrics['f1']:8.2f} |")
+    
+    print(f"| {'Val':8s} | {val_metrics['accuracy']:8.2f} | "
+          f"{val_metrics['auc']:8.2f} | {val_metrics['sensitivity']:11.2f} | "
+          f"{val_metrics['specificity']:11.2f} | {val_metrics['ppv']:9.2f} | "
+          f"{val_metrics['npv']:8.2f} | {val_metrics['f1']:8.2f} |")
+    
+    print(f"| {'Test':8s} | {test_metrics['accuracy']:8.2f} | "
+          f"{test_metrics['auc']:8.2f} | {test_metrics['sensitivity']:11.2f} | "
+          f"{test_metrics['specificity']:11.2f} | {test_metrics['ppv']:9.2f} | "
+          f"{test_metrics['npv']:8.2f} | {test_metrics['f1']:8.2f} |")
+
+
+# =========================
+# Model Save / Load CV Splits
+# =========================
+def save_model_checkpoint(model, fold_idx, fold_result, save_dir, args, is_best=False):
+    save_dir = Path(save_dir) / "checkpoints"
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    checkpoint = {
+        'fold': fold_idx + 1,
+        'model_state_dict': model.state_dict(),
+        'accuracy': fold_result['test_metrics']['accuracy'],
+        'auc': fold_result['test_metrics']['auc'],
+        'config': {
+            'lr': args.lr,
+            'bag_size': args.bag_size,
+            'seed': args.seed,
+            'model': 'ABMILGatedBase'
+        }
+    }
+
+    filename = f"{'best_' if is_best else ''}model_fold{fold_idx+1}_auc{fold_result['test_metrics']['auc']:.4f}.pt"
+    checkpoint_path = save_dir / filename
+    torch.save(checkpoint, checkpoint_path)
+
+    print(f"[✓] Model saved: {checkpoint_path}")
+    return checkpoint_path
+
+
+def load_cv_splits_with_paths(cv_split_file, data_root, debug=False):
+    with open(cv_split_file, 'r') as f:
+        cv_splits = json.load(f)
+    for fold_data in cv_splits['folds']:
+        for split_name in ['train_wsis', 'val_wsis', 'test_wsis']:
+            file_paths = []
+            for filename in fold_data[split_name]:
+                meta_path = os.path.join(data_root, 'meta', filename)
+                nonmeta_path = os.path.join(data_root, 'nonmeta', filename)
+                if os.path.exists(meta_path):
+                    file_paths.append(meta_path)
+                elif os.path.exists(nonmeta_path):
+                    file_paths.append(nonmeta_path)
+                else:
+                    print(f"Warning: {filename} not found")
+            fold_data[f'{split_name}_paths'] = file_paths
+    return cv_splits
+
+
+def check_data_leakage(cv_splits):
+    """CV split에서 data leakage 체크"""
+    print("\n" + "="*80)
+    print("Checking Data Leakage")
+    print("="*80)
+    
+    all_folds_ok = True
+    
+    for fold_data in cv_splits['folds']:
+        fold_num = fold_data['fold']
+        
+        # 파일명만 추출 (경로 제거)
+        train_files = set([os.path.basename(p) for p in fold_data['train_wsis_paths']])
+        val_files = set([os.path.basename(p) for p in fold_data['val_wsis_paths']])
+        test_files = set([os.path.basename(p) for p in fold_data['test_wsis_paths']])
+        
+        print(f"\nFold {fold_num}:")
+        print(f"  Train: {len(train_files):3d} files")
+        print(f"  Val:   {len(val_files):3d} files")
+        print(f"  Test:  {len(test_files):3d} files")
+        print(f"  Total: {len(train_files) + len(val_files) + len(test_files):3d} files")
+        
+        # Overlap 체크
+        train_val_overlap = train_files & val_files
+        train_test_overlap = train_files & test_files
+        val_test_overlap = val_files & test_files
+        
+        has_overlap = False
+        
+        if train_val_overlap:
+            print(f"  ❌ Train-Val overlap: {len(train_val_overlap)} files")
+            print(f"      Examples: {list(train_val_overlap)[:3]}")
+            has_overlap = True
+            all_folds_ok = False
+        
+        if train_test_overlap:
+            print(f"  ❌ Train-Test overlap: {len(train_test_overlap)} files")
+            print(f"      Examples: {list(train_test_overlap)[:3]}")
+            has_overlap = True
+            all_folds_ok = False
+        
+        if val_test_overlap:
+            print(f"  ❌ Val-Test overlap: {len(val_test_overlap)} files")
+            print(f"      Examples: {list(val_test_overlap)[:3]}")
+            has_overlap = True
+            all_folds_ok = False
+        
+        if not has_overlap:
+            print(f"  ✅ No overlap detected")
+    
+    print("\n" + "="*80)
+    if all_folds_ok:
+        print("✅ All folds passed leakage check")
+    else:
+        print("❌ DATA LEAKAGE DETECTED! CV splits need to be regenerated!")
+        print("   Training results cannot be trusted.")
+    print("="*80 + "\n")
+    
+    return all_folds_ok
+
+
+def check_label_distribution(cv_splits, data_root, bag_size):
+    """각 fold의 label 분포 확인"""
+    print("\n" + "="*80)
+    print("Label Distribution Analysis")
+    print("="*80)
+    
+    for fold_data in cv_splits['folds']:
+        fold_num = fold_data['fold']
+        
+        print(f"\nFold {fold_num}:")
+        
+        for split_name in ['train', 'val', 'test']:
+            paths = fold_data[f'{split_name}_wsis_paths']
+            dataset = ThyroidWSIDataset(paths, bag_size=bag_size, use_variance=False)
+            
+            labels = [dataset[i][1].item() for i in range(len(dataset))]
+            pos_count = sum(labels)
+            neg_count = len(labels) - pos_count
+            pos_ratio = pos_count / len(labels) * 100 if len(labels) > 0 else 0
+            
+            print(f"  {split_name.capitalize():5s}: Pos={pos_count:3d} ({pos_ratio:5.1f}%), "
+                  f"Neg={neg_count:3d} ({100-pos_ratio:5.1f}%), Total={len(labels):3d}")
+    
+    print("\n" + "="*80 + "\n")
+
+
+
+# =========================
+# Run K-Fold CV
+# =========================
+def run_k_fold_cv(cv_splits, args, device):
+    all_fold_results = []
+    all_predictions, all_true_labels = [], []
+    saved_model_paths = []
+    config = ABMILGatedBaseConfig()
+
+    for fold_data in cv_splits['folds']:
+        fold_idx = fold_data['fold'] - 1
+        print(f"\n{'='*80}")
+        print(f"Fold {fold_data['fold']}/{len(cv_splits['folds'])}")
+        print(f"{'='*80}")
+
+        train_dataset = ThyroidWSIDataset(fold_data['train_wsis_paths'], bag_size=args.bag_size, use_variance=False)
+        val_dataset = ThyroidWSIDataset(fold_data['val_wsis_paths'], bag_size=args.bag_size, use_variance=False)
+        test_dataset = ThyroidWSIDataset(fold_data['test_wsis_paths'], bag_size=args.bag_size, use_variance=False)
+
+        print(f"Train size: {len(train_dataset)}, Val size: {len(val_dataset)}, Test size: {len(test_dataset)}")
+
+        train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True)
+        val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False)
+        test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
+
+        model = ABMILModel(config).to(device)
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=15, factor=0.5)
+        early_stopping = EarlyStopping(patience=8, min_delta=0.001)
+
+        best_train_metrics, best_val_metrics = {}, {}
+        best_epoch = 0
+
+        print(f"\n{'─'*80}")
+        print(f"Starting training for Fold {fold_data['fold']}")
+        print(f"{'─'*80}\n")
+
+        for epoch in range(args.epochs):
+            train_metrics = run_one_epoch(model, train_loader, device, optimizer, train=True)
+            val_metrics = run_one_epoch(model, val_loader, device, train=False)
+            scheduler.step(val_metrics["loss"])
+            
+            print(f"Epoch [{epoch+1:3d}/{args.epochs}] | "
+                  f"Train Loss: {train_metrics['loss']:.4f} | "
+                  f"Train AUC: {train_metrics['auc']:.4f} | "
+                  f"Train Acc: {train_metrics['accuracy']:.4f} | "
+                  f"Val Loss: {val_metrics['loss']:.4f} | "
+                  f"Val AUC: {val_metrics['auc']:.4f} | "
+                  f"Val Acc: {val_metrics['accuracy']:.4f} | "
+                  f"LR: {optimizer.param_groups[0]['lr']:.2e}")
+
+            if val_metrics["auc"] > best_val_metrics.get("auc", 0):
+                best_val_metrics = val_metrics
+                best_train_metrics = train_metrics
+                best_epoch = epoch + 1
+                print(f"  ↑ Best model updated (Val AUC: {val_metrics['auc']:.4f})")
+
+            if early_stopping(val_metrics["auc"], model):
+                print(f"\n⚠ Early stopping triggered at epoch {epoch+1}")
+                print(f"  Best epoch was {best_epoch} with Val AUC: {best_val_metrics['auc']:.4f}")
+                early_stopping.restore_best(model)
+                break
+
+        # Test evaluation
+        print(f"\n{'─'*80}")
+        print(f"Testing Fold {fold_data['fold']} on best model (Epoch {best_epoch})")
+        print(f"{'─'*80}")
+        
+        test_probs, test_labels, test_preds = evaluate_model(model, test_loader, device)
+        test_metrics = compute_metrics_with_confusion(test_labels, test_preds, test_probs)
+
+        print(f"\n📊 Test Results:")
+        print(f"  AUC:         {test_metrics['auc']:.4f}")
+        print(f"  Accuracy:    {test_metrics['accuracy']:.4f}")
+        print(f"  Sensitivity: {test_metrics['sensitivity']:.4f}")
+        print(f"  Specificity: {test_metrics['specificity']:.4f}")
+        print(f"  PPV:         {test_metrics['ppv']:.4f}")
+        print(f"  NPV:         {test_metrics['npv']:.4f}")
+        print(f"  F1 Score:    {test_metrics['f1']:.4f}")
+        print(f"\n  Confusion Matrix:")
+        print(f"    TP: {test_metrics['tp']:3d}  |  FN: {test_metrics['fn']:3d}")
+        print(f"    FP: {test_metrics['fp']:3d}  |  TN: {test_metrics['tn']:3d}")
+
+        # Fold별 표 출력
+        print_fold_table(fold_data['fold'], best_train_metrics, best_val_metrics, test_metrics)
+
+        fold_result = {
+            "fold": fold_data['fold'],
+            "train_size": len(train_dataset),
+            "val_size": len(val_dataset),
+            "test_size": len(test_dataset),
+            "best_epoch": best_epoch,
+            "best_train_metrics": best_train_metrics,
+            "best_val_metrics": best_val_metrics,
+            "test_metrics": test_metrics
+        }
+
+        all_fold_results.append(fold_result)
+        all_predictions.extend(test_probs)
+        all_true_labels.extend(test_labels)
+
+        if args.save_model:
+            if args.save_best_only:
+                if fold_idx == 0 or test_metrics['auc'] > max(r['test_metrics']['auc'] for r in all_fold_results[:-1]):
+                    path = save_model_checkpoint(model, fold_idx, fold_result, args.model_save_dir, args, is_best=True)
+                    saved_model_paths.append(path)
+                    print(f"✓ Best model saved")
+            else:
+                path = save_model_checkpoint(model, fold_idx, fold_result, args.model_save_dir, args)
+                saved_model_paths.append(path)
+                print(f"✓ Model checkpoint saved")
+
+
+
+
+    # ==========================================
+    # 전체 Summary 계산
+    # ==========================================
+    print(f"\n\n{'='*80}")
+    print(f"WSI Instance Results (Mean ± Std Across All Folds)")
+    print(f"{'='*80}\n")
+    
+    metrics_order = ['accuracy', 'auc', 'sensitivity', 'specificity', 'ppv', 'npv', 'f1']
+    metric_names = {
+        'accuracy': 'Accuracy',
+        'auc': 'AUC',
+        'sensitivity': 'Sensitivity',
+        'specificity': 'Specificity',
+        'ppv': 'PPV',
+        'npv': 'NPV',
+        'f1': 'F1-score'
+    }
+    
+    # Summary 통계 계산 (JSON 저장용)
+    summary_stats = {}
+    for set_name, metric_key in [('train', 'best_train_metrics'), 
+                                   ('val', 'best_val_metrics'), 
+                                   ('test', 'test_metrics')]:
+        summary_stats[set_name] = {}
+        for metric in metrics_order:
+            values = [r[metric_key][metric] for r in all_fold_results]
+            summary_stats[set_name][metric] = {
+                'mean': float(np.mean(values)),
+                'std': float(np.std(values)),
+                'values': [float(v) for v in values]
+            }
+    
+    # Summary 표 출력
+    header = f"| {'Set':8s} |"
+    for metric in metrics_order:
+        header += f" {metric_names[metric]:17s} |"
+    print(header)
+    print("|" + "-"*10 + "|" + "-"*19*len(metrics_order) + "|")
+    
+    for set_name, set_label in [('train', 'Train'), ('val', 'Val'), ('test', 'Test')]:
+        row = f"| **{set_label}** |"
+        for metric in metrics_order:
+            mean_val = summary_stats[set_name][metric]['mean']
+            std_val = summary_stats[set_name][metric]['std']
+            row += f" **{mean_val:.3f} ± {std_val:.3f}** |"
+        print(row)
+    
+    # ==========================================
+    # Fold별 상세 표
+    # ==========================================
+    print(f"\n\n{'='*80}")
+    print(f"WSI Instance Fold-by-Fold Results")
+    print(f"{'='*80}\n")
+    
+    for fold_result in all_fold_results:
+        print(f"fold {fold_result['fold']}.")
+        print_fold_table(
+            fold_result['fold'],
+            fold_result['best_train_metrics'],
+            fold_result['best_val_metrics'],
+            fold_result['test_metrics']
+        )
+        print()
+    
+    # Total Confusion Matrix
+    print(f"\n{'─'*80}")
+    print(f"Total Confusion Matrix (Test):")
+    print(f"{'─'*80}")
+    total_tp = sum(r['test_metrics']['tp'] for r in all_fold_results)
+    total_tn = sum(r['test_metrics']['tn'] for r in all_fold_results)
+    total_fp = sum(r['test_metrics']['fp'] for r in all_fold_results)
+    total_fn = sum(r['test_metrics']['fn'] for r in all_fold_results)
+    
+    print(f"    TP: {total_tp:4d}  |  FN: {total_fn:4d}")
+    print(f"    FP: {total_fp:4d}  |  TN: {total_tn:4d}")
+
+    return all_fold_results, all_predictions, all_true_labels, saved_model_paths, summary_stats
+
+
+# =========================
+# Utility
+# =========================
+def convert_numpy(obj):
+    if isinstance(obj, dict):
+        return {str(k): convert_numpy(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy(i) for i in obj]
+    elif isinstance(obj, (np.integer,)):
+        return int(obj)
+    elif isinstance(obj, (np.floating,)):
+        return float(obj)
+    else:
+        return obj
+
+
+# =========================
+# Main
+# =========================
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--data_root', type=str, required=True)
+    parser.add_argument('--model_save_dir', type=str, required=True)
+    parser.add_argument('--cv_split_file', type=str, required=True)
+    parser.add_argument('--epochs', type=int, default=100)
+    parser.add_argument('--lr', type=float, default=1e-4)
+    parser.add_argument('--bag_size', type=int, default=2000)
+    parser.add_argument('--seed', type=int, default=42)
+    parser.add_argument('--save_model', action='store_true')
+    parser.add_argument('--save_best_only', action='store_true')
+    parser.add_argument('--debug', action='store_true')
+    args = parser.parse_args()
+
+    set_seed(args.seed)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    if not Path(args.cv_split_file).exists():
+        raise ValueError(f"CV split file not found: {args.cv_split_file}")
+    
+    cv_splits = load_cv_splits_with_paths(args.cv_split_file, args.data_root, debug=args.debug)
+
+    leakage_check_passed = check_data_leakage(cv_splits)
+    check_label_distribution(cv_splits, args.data_root, args.bag_size)
+    
+    if not leakage_check_passed:
+        print("\n⚠️  WARNING: Data leakage detected!")
+        response = input("Continue training anyway? (yes/no): ")
+        if response.lower() != 'yes':
+            print("Training aborted.")
+            return
+    
+    # ✅ summary_stats 추가로 받음
+    fold_results, predictions, true_labels, model_paths, summary_stats = run_k_fold_cv(cv_splits, args, device)
+
+    # ==========================================
+    # JSON 결과 구성
+    # ==========================================
+    results = {
+        "summary_statistics": summary_stats,  # ✅ Train/Val/Test 평균±표준편차
+        "folds": fold_results,                # ✅ 각 fold 상세 결과
+    }
+    
+    # Final aggregated results
+    if len(set(true_labels)) > 1:
+        eval_results = comprehensive_evaluation(true_labels, predictions)
+        results["final_aggregated"] = eval_results
+        
+        print(f"\n{'='*80}")
+        print(f"Final Aggregated Results (All Folds Combined)")
+        print(f"{'='*80}\n")
+        
+        for key, value in eval_results.items():
+            if isinstance(value, (int, float, np.integer, np.floating)):
+                print(f"{key:20s}: {value:.4f}")
+
+    # JSON 저장
+    results_path = Path(args.model_save_dir) / "results.json"
+    with open(results_path, "w") as f:
+        json.dump(convert_numpy(results), f, indent=2)
+    print(f"\n[✓] Results saved: {results_path}")
+
+    if args.save_model and model_paths:
+        print(f"[✓] Saved {len(model_paths)} model checkpoints")
+
+    print("\n[✓] Training completed!")
+
+
+if __name__ == "__main__":
+    main()

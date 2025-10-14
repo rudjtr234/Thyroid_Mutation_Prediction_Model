@@ -1,0 +1,394 @@
+{
+  "final": {
+    "auc": 0.72255,
+    "accuracy": 0.66,
+    "precision": 0.686046511627907,
+    "recall": 0.59,
+    "f1_score": 0.6344086021505376,
+    "confusion_matrix": [
+      [
+        73,
+        27
+      ],
+      [
+        41,
+        59
+      ]
+    ],
+    "classification_report": "              precision    recall  f1-score   support\n\n           0       0.64      0.73      0.68       100\n           1       0.69      0.59      0.63       100\n\n    accuracy                           0.66       200\n   macro avg       0.66      0.66      0.66       200\nweighted avg       0.66      0.66      0.66       200\n"
+  },
+  "folds": [
+    {
+      "fold": 1,
+      "accuracy": 0.6,
+      "auc": 0.64375,
+      "test_wsis": [
+        "TC_04_5306.npy",
+        "TC_04_1480.npy",
+        "TC_04_3336.npy",
+        "TC_04_3127.npy",
+        "TC_04_0560.npy",
+        "TC_04_1450.npy",
+        "TC_04_2660.npy",
+        "TC_04_6923.npy",
+        "TC_04_4425.npy",
+        "TC_04_5818.npy",
+        "TC_04_4459.npy",
+        "TC_04_2343.npy",
+        "TC_04_2862.npy",
+        "TC_04_1865.npy",
+        "TC_04_6456.npy",
+        "TC_04_5417.npy",
+        "TC_04_5295.npy",
+        "TC_04_6663.npy",
+        "TC_04_4439.npy",
+        "TC_04_4117.npy",
+        "TC_04_4047.npy",
+        "TC_04_2929.npy",
+        "TC_04_4502.npy",
+        "TC_04_3008.npy",
+        "TC_04_6332.npy",
+        "TC_04_1144.npy",
+        "TC_04_1855.npy",
+        "TC_04_7874.npy",
+        "TC_04_2443.npy",
+        "TC_04_3422.npy",
+        "TC_04_6902.npy",
+        "TC_04_1610.npy",
+        "TC_04_4415.npy",
+        "TC_04_7202.npy",
+        "TC_04_3588.npy",
+        "TC_04_5599.npy",
+        "TC_04_2606.npy",
+        "TC_04_7346.npy",
+        "TC_04_7133.npy",
+        "TC_04_0722.npy"
+      ],
+      "test_results": [
+        {
+          "filename": "TC_04_1480.npy",
+          "true_label": 1,
+          "weighted_prob": 0.9497309863567353,
+          "simple_avg_prob": 0.9497309863567353,
+          "pred_label": 1,
+          "num_bags": 10
+        },
+        {
+          "filename": "TC_04_1865.npy",
+          "true_label": 1,
+          "weighted_prob": 0.9987666436604091,
+          "simple_avg_prob": 0.9987666436604091,
+          "pred_label": 1,
+          "num_bags": 14
+        },
+        {
+          "filename": "TC_04_4117.npy",
+          "true_label": 1,
+          "weighted_prob": 0.6970707313157618,
+          "simple_avg_prob": 0.6970707313157618,
+          "pred_label": 1,
+          "num_bags": 12
+        },
+        {
+          "filename": "TC_04_2660.npy",
+          "true_label": 1,
+          "weighted_prob": 0.19040002094374764,
+          "simple_avg_prob": 0.19040002094374764,
+          "pred_label": 0,
+          "num_bags": 9
+        },
+        {
+          "filename": "TC_04_3336.npy",
+          "true_label": 1,
+          "weighted_prob": 2.263423902087209e-05,
+          "simple_avg_prob": 2.263423902087209e-05,
+          "pred_label": 0,
+          "num_bags": 14
+        },
+        {
+          "filename": "TC_04_4439.npy",
+          "true_label": 1,
+          "weighted_prob": 0.9999999735090468,
+          "simple_avg_prob": 0.9999999735090468,
+          "pred_label": 1,
+          "num_bags": 9
+        },
+        {
+          "filename": "TC_04_6663.npy",
+          "true_label": 1,
+          "weighted_prob": 0.9363897383213043,
+          "simple_avg_prob": 0.9363897383213043,
+          "pred_label": 1,
+          "num_bags": 10
+        },
+        {
+          "filename": "TC_04_6923.npy",
+          "true_label": 1,
+          "weighted_prob": 0.014913909750816856,
+          "simple_avg_prob": 0.014913909750816856,
+          "pred_label": 0,
+          "num_bags": 8
+        },
+        {
+          "filename": "TC_04_5417.npy",
+          "true_label": 1,
+          "weighted_prob": 0.9933714398315975,
+          "simple_avg_prob": 0.9933714398315975,
+          "pred_label": 1,
+          "num_bags": 14
+        },
+        {
+          "filename": "TC_04_5818.npy",
+          "true_label": 1,
+          "weighted_prob": 1.0,
+          "simple_avg_prob": 1.0,
+          "pred_label": 1,
+          "num_bags": 14
+        },
+        {
+          "filename": "TC_04_1450.npy",
+          "true_label": 1,
+          "weighted_prob": 0.31030355303969764,
+          "simple_avg_prob": 0.31030355303969764,
+          "pred_label": 0,
+          "num_bags": 10
+        },
+        {
+          "filename": "TC_04_4425.npy",
+          "true_label": 1,
+          "weighted_prob": 0.2603585399920121,
+          "simple_avg_prob": 0.2603585399920121,
+          "pred_label": 0,
+          "num_bags": 8
+        },
+        {
+          "filename": "TC_04_5306.npy",
+          "true_label": 1,
+          "weighted_prob": 4.793100631939478e-11,
+          "simple_avg_prob": 4.793100631939478e-11,
+          "pred_label": 0,
+          "num_bags": 13
+        },
+        {
+          "filename": "TC_04_3127.npy",
+          "true_label": 1,
+          "weighted_prob": 6.599105263508218e-07,
+          "simple_avg_prob": 6.599105263508218e-07,
+          "pred_label": 0,
+          "num_bags": 7
+        },
+        {
+          "filename": "TC_04_2343.npy",
+          "true_label": 1,
+          "weighted_prob": 0.001187245695278231,
+          "simple_avg_prob": 0.001187245695278231,
+          "pred_label": 0,
+          "num_bags": 15
+        },
+        {
+          "filename": "TC_04_5295.npy",
+          "true_label": 1,
+          "weighted_prob": 0.9999999880790711,
+          "simple_avg_prob": 0.9999999880790711,
+          "pred_label": 1,
+          "num_bags": 10
+        },
+        {
+          "filename": "TC_04_4459.npy",
+          "true_label": 1,
+          "weighted_prob": 0.997905124317516,
+          "simple_avg_prob": 0.997905124317516,
+          "pred_label": 1,
+          "num_bags": 11
+        },
+        {
+          "filename": "TC_04_2862.npy",
+          "true_label": 1,
+          "weighted_prob": 0.9999997615814209,
+          "simple_avg_prob": 0.9999997615814209,
+          "pred_label": 1,
+          "num_bags": 17
+        },
+        {
+          "filename": "TC_04_6456.npy",
+          "true_label": 1,
+          "weighted_prob": 2.57085768314761e-08,
+          "simple_avg_prob": 2.57085768314761e-08,
+          "pred_label": 0,
+          "num_bags": 13
+        },
+        {
+          "filename": "TC_04_0560.npy",
+          "true_label": 1,
+          "weighted_prob": 0.20294870325597003,
+          "simple_avg_prob": 0.20294870325597003,
+          "pred_label": 0,
+          "num_bags": 8
+        },
+        {
+          "filename": "TC_04_7133.npy",
+          "true_label": 0,
+          "weighted_prob": 0.09986792632844299,
+          "simple_avg_prob": 0.09986792632844299,
+          "pred_label": 0,
+          "num_bags": 8
+        },
+        {
+          "filename": "TC_04_2929.npy",
+          "true_label": 0,
+          "weighted_prob": 0.027053669569918035,
+          "simple_avg_prob": 0.027053669569918035,
+          "pred_label": 0,
+          "num_bags": 13
+        },
+        {
+          "filename": "TC_04_2443.npy",
+          "true_label": 0,
+          "weighted_prob": 0.0001432867587330596,
+          "simple_avg_prob": 0.0001432867587330596,
+          "pred_label": 0,
+          "num_bags": 15
+        },
+        {
+          "filename": "TC_04_2606.npy",
+          "true_label": 0,
+          "weighted_prob": 0.7834066663469587,
+          "simple_avg_prob": 0.7834066663469587,
+          "pred_label": 1,
+          "num_bags": 7
+        },
+        {
+          "filename": "TC_04_1144.npy",
+          "true_label": 0,
+          "weighted_prob": 2.0026372301545122e-11,
+          "simple_avg_prob": 2.0026372301545122e-11,
+          "pred_label": 0,
+          "num_bags": 7
+        },
+        {
+          "filename": "TC_04_5599.npy",
+          "true_label": 0,
+          "weighted_prob": 0.9999937094174899,
+          "simple_avg_prob": 0.9999937094174899,
+          "pred_label": 1,
+          "num_bags": 13
+        },
+        {
+          "filename": "TC_04_3422.npy",
+          "true_label": 0,
+          "weighted_prob": 2.8835223229815283e-05,
+          "simple_avg_prob": 2.8835223229815283e-05,
+          "pred_label": 0,
+          "num_bags": 17
+        },
+        {
+          "filename": "TC_04_6902.npy",
+          "true_label": 0,
+          "weighted_prob": 0.9999979615211487,
+          "simple_avg_prob": 0.9999979615211487,
+          "pred_label": 1,
+          "num_bags": 10
+        },
+        {
+          "filename": "TC_04_7346.npy",
+          "true_label": 0,
+          "weighted_prob": 9.159912100254918e-06,
+          "simple_avg_prob": 9.159912100254918e-06,
+          "pred_label": 0,
+          "num_bags": 11
+        },
+        {
+          "filename": "TC_04_7202.npy",
+          "true_label": 0,
+          "weighted_prob": 1.0,
+          "simple_avg_prob": 1.0,
+          "pred_label": 1,
+          "num_bags": 11
+        },
+        {
+          "filename": "TC_04_6332.npy",
+          "true_label": 0,
+          "weighted_prob": 0.06878040906718089,
+          "simple_avg_prob": 0.06878040906718089,
+          "pred_label": 0,
+          "num_bags": 15
+        },
+        {
+          "filename": "TC_04_0722.npy",
+          "true_label": 0,
+          "weighted_prob": 0.19025050728330165,
+          "simple_avg_prob": 0.19025050728330165,
+          "pred_label": 0,
+          "num_bags": 11
+        },
+        {
+          "filename": "TC_04_4502.npy",
+          "true_label": 0,
+          "weighted_prob": 1.2357271326572198e-08,
+          "simple_avg_prob": 1.2357271326572198e-08,
+          "pred_label": 0,
+          "num_bags": 12
+        },
+        {
+          "filename": "TC_04_7874.npy",
+          "true_label": 0,
+          "weighted_prob": 0.9999996185302734,
+          "simple_avg_prob": 0.9999996185302734,
+          "pred_label": 1,
+          "num_bags": 10
+        },
+        {
+          "filename": "TC_04_3588.npy",
+          "true_label": 0,
+          "weighted_prob": 1.1193962166089477e-06,
+          "simple_avg_prob": 1.1193962166089477e-06,
+          "pred_label": 0,
+          "num_bags": 12
+        },
+        {
+          "filename": "TC_04_1610.npy",
+          "true_label": 0,
+          "weighted_prob": 2.1798517819864136e-09,
+          "simple_avg_prob": 2.1798517819864136e-09,
+          "pred_label": 0,
+          "num_bags": 13
+        },
+        {
+          "filename": "TC_04_1855.npy",
+          "true_label": 0,
+          "weighted_prob": 3.0588008996801364e-06,
+          "simple_avg_prob": 3.0588008996801364e-06,
+          "pred_label": 0,
+          "num_bags": 11
+        },
+        {
+          "filename": "TC_04_3008.npy",
+          "true_label": 0,
+          "weighted_prob": 0.7417153408944918,
+          "simple_avg_prob": 0.7417153408944918,
+          "pred_label": 1,
+          "num_bags": 18
+        },
+        {
+          "filename": "TC_04_4415.npy",
+          "true_label": 0,
+          "weighted_prob": 0.0004165085429121973,
+          "simple_avg_prob": 0.0004165085429121973,
+          "pred_label": 0,
+          "num_bags": 12
+        },
+        {
+          "filename": "TC_04_4047.npy",
+          "true_label": 0,
+          "weighted_prob": 0.17125784149112194,
+          "simple_avg_prob": 0.17125784149112194,
+          "pred_label": 0,
+          "num_bags": 13
+        }
+      ],
+      "debug": {
+        "train_label_dist": {}
+      }
+    }
+  ]
+}
