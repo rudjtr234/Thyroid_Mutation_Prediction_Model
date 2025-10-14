@@ -1,7 +1,7 @@
 """
-ABMIL Preprocessing for UNI2-h Embeddings - Nonmeta V2
-- 기존 nonmeta 100개 제외, 나머지 150개만 임베딩
-- 출력: embeddings/nonmeta_v2/
+ABMIL Preprocessing for UNI2-h Embeddings - Specific Slides
+- 지정된 2000개 슬라이드 리스트에 해당하는 패치만 임베딩
+- 출력: embeddings/selected_slides/
 """
 
 import os
@@ -57,21 +57,22 @@ def embed_batch(img_paths, model, transform, device):
     return feats.cpu().numpy()
 
 
-def load_excluded_slides(exclude_file):
-    """이미 처리된 슬라이드 ID 로드"""
-    if not exclude_file or not Path(exclude_file).exists():
-        return set()
+def load_slide_list(list_file):
+    """2000개 슬라이드 ID 리스트 로드"""
+    if not list_file or not Path(list_file).exists():
+        raise ValueError(f"Slide list file not found: {list_file}")
     
-    excluded = set()
-    with open(exclude_file, 'r') as f:
+    slide_ids = set()
+    with open(list_file, 'r') as f:
         for line in f:
             slide_id = line.strip()
             if slide_id:
+                # .npy 확장자가 있으면 제거
                 if slide_id.endswith('.npy'):
                     slide_id = slide_id[:-4]
-                excluded.add(slide_id)
+                slide_ids.add(slide_id)
     
-    return excluded
+    return slide_ids
 
 
 def process_slide(slide_dir, args, model, transform, device, rank, world_size):
@@ -82,6 +83,7 @@ def process_slide(slide_dir, args, model, transform, device, rank, world_size):
             print(f"[⚠] No tiles found in {slide_dir}")
         return None
 
+    # 타일을 GPU들에 분배
     sub_paths = tile_paths[rank::world_size]
 
     features, coords, tiles_info = [], [], []
@@ -111,6 +113,7 @@ def process_slide(slide_dir, args, model, transform, device, rank, world_size):
 
     features = np.vstack(features) if len(features) > 0 else np.empty((0, 1536))
 
+    # 모든 GPU의 결과를 모음
     all_features = [None for _ in range(world_size)]
     all_coords = [None for _ in range(world_size)]
     all_info = [None for _ in range(world_size)]
@@ -120,16 +123,17 @@ def process_slide(slide_dir, args, model, transform, device, rank, world_size):
     dist.all_gather_object(all_info, tiles_info)
 
     if rank == 0:
+        # 모든 GPU의 결과를 합침
         all_features = np.vstack([f for f in all_features if f is not None and f.shape[0] > 0])
         all_coords = sum([c for c in all_coords if c is not None], [])
         all_info = sum([i for i in all_info if i is not None], [])
 
         slide_id = slide_dir.name
-        
-        # .npy 저장 (nonmeta_v2 폴더에)
-        npy_dir = Path(args.out_dir) / "embeddings" / "nonmeta_v2"
+
+        # .npy 저장 (selected_slides 폴더에)
+        npy_dir = Path(args.out_dir) / "embeddings" / "selected_slides"
         npy_dir.mkdir(parents=True, exist_ok=True)
-        
+
         save_vec = npy_dir / f"{slide_id}.npy"
         np.save(save_vec, all_features)
         print(f"[✓] Saved {save_vec} {all_features.shape}")
@@ -137,11 +141,11 @@ def process_slide(slide_dir, args, model, transform, device, rank, world_size):
         # .json 저장
         json_dir = Path(args.out_dir) / "json_metadata"
         json_dir.mkdir(parents=True, exist_ok=True)
-        
-        save_json = json_dir / f"coords_nonmeta_v2_{slide_id}.json"
+
+        save_json = json_dir / f"coords_selected_{slide_id}.json"
         coord_data = {
             "slide_id": slide_id,
-            "split": "nonmeta_v2",
+            "split": "selected_slides",
             "num_tiles": len(tile_paths),
             "embedding_path": str(save_vec),
             "tiles": all_info
@@ -156,15 +160,15 @@ def process_slide(slide_dir, args, model, transform, device, rank, world_size):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--tile_dir", type=str, 
+    parser.add_argument("--tile_dir", type=str,
                        default="/data/member/kwk/dl/thyroid/image/slide-v1-240412/patch/Train/braf_non_meta",
-                       help="braf_non_meta 타일 디렉토리")
-    parser.add_argument("--out_dir", type=str, 
+                       help="타일 디렉토리")
+    parser.add_argument("--out_dir", type=str,
                        default="/data/143/member/jks/Thyroid_Mutation_dataset",
                        help="출력 디렉토리")
-    parser.add_argument("--exclude_list", type=str,
-                       default="/data/143/member/jks/Thyroid_Mutation_dataset/json_metadata/slide_ids_nonmeta.txt",
-                       help="제외할 슬라이드 목록 (이미 처리된 100개)")
+    parser.add_argument("--slide_list", type=str,
+                       required=True,
+                       help="처리할 2000개 슬라이드 ID 목록 파일 (txt)")
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
@@ -180,75 +184,85 @@ def main():
     # 모델 준비
     model, transform = build_model(device)
 
-    # 제외할 슬라이드 로드
-    excluded_slides = set()
+    # 처리할 슬라이드 리스트 로드
+    target_slides = set()
     if rank == 0:
-        excluded_slides = load_excluded_slides(args.exclude_list)
-        if excluded_slides:
-            print(f"[INFO] Loaded {len(excluded_slides)} slides to exclude")
-            print(f"[INFO] First 5 excluded: {list(excluded_slides)[:5]}")
+        target_slides = load_slide_list(args.slide_list)
+        print(f"[INFO] Loaded {len(target_slides)} slides to process")
+        print(f"[INFO] First 5 slides: {list(target_slides)[:5]}")
 
     # 타일 디렉토리 처리
     tile_dir = Path(args.tile_dir)
     if not tile_dir.exists():
         raise ValueError(f"Tile directory not found: {tile_dir}")
-    
+
     master_data = []
-    
-    slide_dirs = [p for p in tile_dir.iterdir() if p.is_dir()]
-    
+
+    # 모든 슬라이드 디렉토리 검색
+    all_slide_dirs = [p for p in tile_dir.iterdir() if p.is_dir()]
+
     if rank == 0:
-        original_count = len(slide_dirs)
-        
+        # 타겟 슬라이드만 필터링
         filtered_dirs = []
-        for slide_dir in slide_dirs:
+        for slide_dir in all_slide_dirs:
             slide_name = slide_dir.name
-            if slide_name not in excluded_slides:
+            if slide_name in target_slides:
                 filtered_dirs.append(slide_dir)
-        
+
         slide_dirs = filtered_dirs
-        excluded_count = original_count - len(slide_dirs)
         
-        print(f"[INFO] Total slides found: {original_count}")
-        print(f"[INFO] Excluded (already processed): {excluded_count}")
-        print(f"[INFO] Remaining to process: {len(slide_dirs)}")
-        
+        print(f"[INFO] Total slides in directory: {len(all_slide_dirs)}")
+        print(f"[INFO] Matching slides to process: {len(slide_dirs)}")
+
         if len(slide_dirs) == 0:
-            print("[WARNING] No slides left to process!")
-    
+            print("[WARNING] No matching slides found to process!")
+        
+        # 매칭되지 않은 슬라이드 확인
+        found_names = {d.name for d in slide_dirs}
+        not_found = target_slides - found_names
+        if not_found:
+            print(f"[WARNING] {len(not_found)} slides from list not found in directory")
+            print(f"[WARNING] First 5 not found: {list(not_found)[:5]}")
+
+    # 슬라이드 디렉토리 리스트를 모든 GPU에 브로드캐스트
     slide_dirs_list = [slide_dirs if rank == 0 else None]
     dist.broadcast_object_list(slide_dirs_list, src=0)
     slide_dirs = slide_dirs_list[0]
-    
+
+    # 각 슬라이드 처리
     for slide_dir in slide_dirs:
         coord_data = process_slide(slide_dir, args, model, transform, device, rank, world_size)
         if coord_data:
             master_data.append(coord_data)
 
+    # 마스터 JSON 및 메타데이터 저장
     if rank == 0 and master_data:
-        json_dir = Path(args.out_dir) / "json_metadata"
+        json_dir = Path(args.out_dir).parent / "json_metadata" / Path(args.out_dir).name
         json_dir.mkdir(parents=True, exist_ok=True)
-        
-        master_json = json_dir / "coords_nonmeta_v2_ALL.json"
+
+        # 마스터 JSON
+        master_json = json_dir / "coords_selected_slides_ALL.json"
         with open(master_json, "w") as f:
             json.dump(master_data, f, indent=2)
         print(f"[✓] Master JSON saved: {master_json} ({len(master_data)} slides)")
-        
+
+        # 슬라이드 ID 리스트
         slide_ids = [item["slide_id"] for item in master_data]
-        slide_ids_txt = json_dir / "slide_ids_nonmeta_v2.txt"
+        slide_ids_txt = json_dir / "slide_ids_selected_slides.txt"
         with open(slide_ids_txt, "w") as f:
             f.write("\n".join(slide_ids))
         print(f"[✓] Slide IDs saved: {slide_ids_txt} ({len(slide_ids)} slides)")
-        
-        metadata_json = json_dir / "metadata_nonmeta_v2.json"
+
+        # 메타데이터
+        metadata_json = json_dir / "metadata_selected_slides.json"
         metadata = {
-            "split": "nonmeta_v2",
-            "total_slides": len(slide_ids),
-            "excluded_slides": len(excluded_slides),
+            "split": "selected_slides",
+            "total_slides_processed": len(slide_ids),
+            "total_slides_requested": len(target_slides),
             "seed": args.seed,
             "slide_ids": slide_ids,
             "tile_dir": str(tile_dir),
-            "exclude_list": args.exclude_list
+            "slide_list_file": args.slide_list
         }
         with open(metadata_json, "w") as f:
             json.dump(metadata, f, indent=2)
