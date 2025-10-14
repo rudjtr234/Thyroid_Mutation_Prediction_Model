@@ -1,8 +1,7 @@
 # 🧬 갑상선 BRAF 변이 예측 모델 (Thyroid Mutation Prediction Model)
 
 본 프로젝트는 **갑상선암 병리 슬라이드(WSI)** 이미지를 기반으로  
-딥러닝을 활용하여 **BRAF 변이 여부를 예측**하는 인공지능 모델을 개발하기 위한 연구입니다.  
-본 연구는 MTS Company R&D 팀에서 수행 중이며, 디지털 병리 기반 정밀의료 기술 개발의 일환입니다.
+딥러닝을 활용하여 **BRAF 변이 여부를 예측**하는 인공지능 모델을 개발하기 위한 연구이자 디지털 병리 기반 정밀의료 기술 개발의 일환입니다.
 
 ---
 
@@ -37,4 +36,3 @@ WSI(Whole Slide Image) 임베딩 파이프라인과,
   - Head 수: 24  
   - Activation: SiLU  
   - Layer: SwiGLU packed MLP  
-
