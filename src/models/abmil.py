@@ -99,7 +99,12 @@ class ABMIL(MIL):
         h, A_base = self.forward_attention(h, attn_mask=attn_mask, attn_only=False)  # A == B x K x M
         A = F.softmax(A_base, dim=-1)  # softmax over N
         h = torch.bmm(A, h).squeeze(dim=1)  # B x K x C --> B x C
-        log_dict = {'attention': A_base if return_attention else None}
+        
+        # 수정된 부분: 'A' 키 추가
+        log_dict = {
+            'attention': A_base if return_attention else None,
+            'A': A if return_attention else None  # visualization용 softmax 적용된 attention
+        }
         return h, log_dict
 
     def forward_head(self, h: torch.Tensor) -> torch.Tensor:
@@ -174,6 +179,7 @@ class ABMILGatedBaseConfig(PretrainedConfig):
         self.gate = gate
         self.embed_dim = embed_dim
         self.attn_dim = attn_dim
+
         self.num_fc_layers = num_fc_layers
         self.dropout = dropout
         self.in_dim = in_dim
@@ -247,5 +253,6 @@ if __name__ == "__main__":
     print(f"BRAF logits: {results_dict['logits']}")
     print(f"Loss: {results_dict['loss']:.4f}")
     print(f"Attention shape: {log_dict['attention'].shape}")
+    print(f"A shape: {log_dict['A'].shape}")
     
     print("✅ UNI2 ABMIL model working correctly for BRAF classification!")

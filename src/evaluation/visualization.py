@@ -1,421 +1,306 @@
 """
-evaluation/visualization.py
-ABMIL 성능 평가 및 시각화 함수들
+500개 Bag Attention Score Overlay Visualization (원본 패치 이미지 + 반투명 오버레이)
+- 원본 패치 이미지 위에 attention score를 반투명 색상으로 오버레이
+- 저장된 results.json의 attention scores 사용
 """
 
-import matplotlib.pyplot as plt
-import seaborn as sns
-import numpy as np
-import pandas as pd
-from sklearn.metrics import roc_curve, auc, confusion_matrix
-from sklearn.metrics import precision_recall_curve, average_precision_score
 import os
-from typing import List, Dict, Optional, Tuple
+import json
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')
+from matplotlib.colors import LinearSegmentedColormap
+from pathlib import Path
+from PIL import Image, ImageDraw, ImageFont
 
-# 한글 폰트 설정 (선택사항)
-plt.rcParams['font.size'] = 12
-plt.rcParams['figure.figsize'] = (10, 8)
+
+def get_patch_image_path(wsi_name, patch_idx, patch_base_dir):
+    """WSI 이름과 patch index로 실제 patch 이미지 경로 찾기"""
+    # BRAF+ 경로
+    meta_dir = Path(patch_base_dir) / "Train" / "braf_meta" / wsi_name
+    # BRAF- 경로
+    nonmeta_dir = Path(patch_base_dir) / "Train" / "braf_nonmeta" / wsi_name
+    
+    # 두 경로 모두 확인
+    for base_dir in [meta_dir, nonmeta_dir]:
+        if base_dir.exists():
+            # 다양한 naming convention 시도
+            for ext in ['.png', '.jpg', '.jpeg']:
+                for pattern in [f"patch_{patch_idx}{ext}", f"{patch_idx}{ext}"]:
+                    patch_path = base_dir / pattern
+                    if patch_path.exists():
+                        return patch_path
+    
+    return None
 
 
-def plot_confusion_matrix(true_labels: List[int], 
-                         predictions: List[float], 
-                         threshold: float = 0.5,
-                         save_path: Optional[str] = None,
-                         title: str = "Confusion Matrix") -> plt.Figure:
+def create_attention_heatmap_colormap():
+    """Attention score용 colormap (blue -> green -> yellow -> red)"""
+    colors = ['#2E3192', '#1BFFFF', '#00FF00', '#FFFF00', '#FF0000']
+    cmap = LinearSegmentedColormap.from_list('attention', colors, N=256)
+    return cmap
+
+
+def add_score_overlay(img, score, cmap, min_score, max_score, alpha=0.5):
     """
-    Confusion Matrix 시각화
+    패치 이미지에 attention score 오버레이 추가
     
     Args:
-        true_labels: 실제 레이블 [0, 1, 1, 0, ...]
-        predictions: 예측 확률 [0.2, 0.8, 0.9, 0.1, ...]
-        threshold: 분류 임계값
-        save_path: 저장 경로
-        title: 그래프 제목
+        img: PIL Image (원본 패치)
+        score: attention score
+        cmap: colormap
+        min_score: 최소 score
+        max_score: 최대 score
+        alpha: 오버레이 투명도 (0~1, 낮을수록 원본이 잘 보임)
     """
-    # 확률을 클래스로 변환
-    pred_labels = (np.array(predictions) >= threshold).astype(int)
+    # Score 정규화
+    norm_score = (score - min_score) / (max_score - min_score + 1e-8)
     
-    # Confusion matrix 계산
-    cm = confusion_matrix(true_labels, pred_labels)
+    # Colormap에서 색상 가져오기
+    color_rgba = cmap(norm_score)
+    color_rgb = tuple(int(c * 255) for c in color_rgba[:3])
     
-    # 시각화
-    fig, ax = plt.subplots(figsize=(8, 6))
+    # 색상 오버레이 생성
+    overlay = Image.new('RGB', img.size, color_rgb)
     
-    # Heatmap 생성
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
-                xticklabels=['BRAF-', 'BRAF+'],
-                yticklabels=['BRAF-', 'BRAF+'],
-                ax=ax)
+    # 원본 이미지와 블렌딩 (alpha가 낮을수록 원본이 더 보임)
+    blended = Image.blend(img.convert('RGB'), overlay, alpha=alpha)
     
-    # 라벨 및 제목 설정
-    ax.set_xlabel('Predicted Label', fontsize=14)
-    ax.set_ylabel('True Label', fontsize=14)
-    ax.set_title(title, fontsize=16, fontweight='bold')
-    
-    # 성능 메트릭 추가
-    tn, fp, fn, tp = cm.ravel()
-    accuracy = (tp + tn) / (tp + tn + fp + fn)
-    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-    recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
-    
-    # 메트릭을 텍스트로 추가
-    metrics_text = f'Accuracy: {accuracy:.3f}\nPrecision: {precision:.3f}\nRecall: {recall:.3f}\nF1-Score: {f1:.3f}'
-    ax.text(2.2, 1, metrics_text, fontsize=12, 
-            bbox=dict(boxstyle="round,pad=0.3", facecolor="lightgray", alpha=0.8))
-    
-    plt.tight_layout()
-    
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Confusion matrix saved to: {save_path}")
-    
-    return fig
+    return blended
 
 
-def plot_roc_curve(true_labels: List[int], 
-                  predictions: List[float],
-                  save_path: Optional[str] = None,
-                  title: str = "ROC Curve") -> plt.Figure:
+def visualize_500_patches_with_overlay(results_json_path, patch_base_dir, save_dir,
+                                       fold_num=1, wsi_names=None,
+                                       thumbnail_size=(96, 96), 
+                                       grid_layout=(25, 20),  # (n_cols, n_rows)
+                                       overlay_alpha=0.4,  # 0.4 = 원본 60% + 오버레이 40%
+                                       dpi=200):
     """
-    ROC Curve 시각화
+    500개 패치의 원본 이미지 위에 attention score를 오버레이로 시각화
     
     Args:
-        true_labels: 실제 레이블
-        predictions: 예측 확률
-        save_path: 저장 경로
-        title: 그래프 제목
+        results_json_path: results.json 파일 경로
+        patch_base_dir: 패치 이미지 base 디렉토리
+        save_dir: 저장 디렉토리
+        fold_num: 시각화할 fold 번호
+        wsi_names: 시각화할 WSI 이름 리스트 (None이면 첫 3개)
+        thumbnail_size: 썸네일 크기 (픽셀)
+        grid_layout: (n_cols, n_rows) 그리드 레이아웃
+        overlay_alpha: 오버레이 투명도 (0~1, 낮을수록 원본이 더 보임)
+        dpi: 저장 이미지 해상도
     """
-    # ROC curve 계산
-    fpr, tpr, thresholds = roc_curve(true_labels, predictions)
-    roc_auc = auc(fpr, tpr)
+    # results.json 로드
+    print(f"\n{'='*80}")
+    print(f"Loading attention scores from: {results_json_path}")
+    print(f"{'='*80}")
     
-    # 시각화
-    fig, ax = plt.subplots(figsize=(8, 6))
+    with open(results_json_path, 'r') as f:
+        results = json.load(f)
     
-    # ROC curve 그리기
-    ax.plot(fpr, tpr, color='darkorange', lw=2, 
-            label=f'ROC Curve (AUC = {roc_auc:.3f})')
+    # 해당 fold 찾기
+    fold_data = None
+    for fold in results['folds']:
+        if fold['fold'] == fold_num:
+            fold_data = fold
+            break
     
-    # 대각선 (랜덤 분류기) 그리기
-    ax.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--', 
-            label='Random Classifier (AUC = 0.500)')
+    if fold_data is None:
+        raise ValueError(f"Fold {fold_num} not found in results.json")
     
-    # 축 설정
-    ax.set_xlim([0.0, 1.0])
-    ax.set_ylim([0.0, 1.05])
-    ax.set_xlabel('False Positive Rate (1 - Specificity)', fontsize=14)
-    ax.set_ylabel('True Positive Rate (Sensitivity)', fontsize=14)
-    ax.set_title(title, fontsize=16, fontweight='bold')
-    ax.legend(loc="lower right", fontsize=12)
-    ax.grid(True, alpha=0.3)
+    if 'test_attention_scores' not in fold_data:
+        raise ValueError(f"No attention scores found in fold {fold_num}")
     
-    plt.tight_layout()
+    attention_scores_dict = fold_data['test_attention_scores']
     
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"ROC curve saved to: {save_path}")
+    # 저장 디렉토리 생성
+    save_dir = Path(save_dir) / f"fold_{fold_num}_500patches_overlay"
+    save_dir.mkdir(parents=True, exist_ok=True)
     
-    return fig
-
-
-def plot_precision_recall_curve(true_labels: List[int], 
-                               predictions: List[float],
-                               save_path: Optional[str] = None,
-                               title: str = "Precision-Recall Curve") -> plt.Figure:
-    """
-    Precision-Recall Curve 시각화
-    """
-    # PR curve 계산
-    precision, recall, thresholds = precision_recall_curve(true_labels, predictions)
-    avg_precision = average_precision_score(true_labels, predictions)
+    cmap = create_attention_heatmap_colormap()
+    n_cols, n_rows = grid_layout
     
-    # 시각화
-    fig, ax = plt.subplots(figsize=(8, 6))
+    print(f"\n{'='*80}")
+    print(f"Generating 500-Patch Attention Overlays - Fold {fold_num}")
+    print(f"Grid Layout: {n_cols} cols × {n_rows} rows = {n_cols * n_rows} patches")
+    print(f"Thumbnail Size: {thumbnail_size}")
+    print(f"Overlay Alpha: {overlay_alpha} (원본 {(1-overlay_alpha)*100:.0f}% + 오버레이 {overlay_alpha*100:.0f}%)")
+    print(f"{'='*80}")
+    print(f"Total WSIs in JSON: {len(attention_scores_dict)}")
     
-    # PR curve 그리기
-    ax.plot(recall, precision, color='blue', lw=2,
-            label=f'PR Curve (AP = {avg_precision:.3f})')
-    
-    # Baseline (클래스 비율) 그리기
-    baseline = np.mean(true_labels)
-    ax.axhline(y=baseline, color='red', linestyle='--', lw=2,
-               label=f'Baseline (AP = {baseline:.3f})')
-    
-    # 축 설정
-    ax.set_xlim([0.0, 1.0])
-    ax.set_ylim([0.0, 1.05])
-    ax.set_xlabel('Recall', fontsize=14)
-    ax.set_ylabel('Precision', fontsize=14)
-    ax.set_title(title, fontsize=16, fontweight='bold')
-    ax.legend(loc="lower left", fontsize=12)
-    ax.grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"PR curve saved to: {save_path}")
-    
-    return fig
-
-
-def plot_learning_curves(train_losses: List[float],
-                        train_accs: List[float],
-                        val_losses: Optional[List[float]] = None,
-                        val_accs: Optional[List[float]] = None,
-                        save_path: Optional[str] = None,
-                        title: str = "Learning Curves") -> plt.Figure:
-    """
-    학습 곡선 시각화
-    
-    Args:
-        train_losses: 훈련 손실값들
-        train_accs: 훈련 정확도들
-        val_losses: 검증 손실값들 (선택사항)
-        val_accs: 검증 정확도들 (선택사항)
-    """
-    epochs = range(1, len(train_losses) + 1)
-    
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
-    
-    # Loss 곡선
-    ax1.plot(epochs, train_losses, 'b-', label='Training Loss', linewidth=2)
-    if val_losses:
-        ax1.plot(epochs, val_losses, 'r-', label='Validation Loss', linewidth=2)
-    ax1.set_title('Model Loss', fontsize=14, fontweight='bold')
-    ax1.set_xlabel('Epoch', fontsize=12)
-    ax1.set_ylabel('Loss', fontsize=12)
-    ax1.legend()
-    ax1.grid(True, alpha=0.3)
-    
-    # Accuracy 곡선
-    ax2.plot(epochs, train_accs, 'b-', label='Training Accuracy', linewidth=2)
-    if val_accs:
-        ax2.plot(epochs, val_accs, 'r-', label='Validation Accuracy', linewidth=2)
-    ax2.set_title('Model Accuracy', fontsize=14, fontweight='bold')
-    ax2.set_xlabel('Epoch', fontsize=12)
-    ax2.set_ylabel('Accuracy', fontsize=12)
-    ax2.legend()
-    ax2.grid(True, alpha=0.3)
-    
-    plt.suptitle(title, fontsize=16, fontweight='bold')
-    plt.tight_layout()
-    
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Learning curves saved to: {save_path}")
-    
-    return fig
-
-
-def plot_cross_validation_results(cv_results: List[Dict],
-                                 save_path: Optional[str] = None,
-                                 title: str = "Cross-Validation Results") -> plt.Figure:
-    """
-    Cross-Validation 결과 시각화
-    
-    Args:
-        cv_results: [{'fold': 1, 'true_label': 1, 'pred_label': 0, 'avg_prob': 0.3}, ...]
-    """
-    # 데이터 준비
-    folds = [r['fold'] for r in cv_results]
-    true_labels = [r['true_label'] for r in cv_results]
-    pred_probs = [r['avg_prob'] for r in cv_results]
-    correct = [1 if r['true_label'] == r['pred_label'] else 0 for r in cv_results]
-    
-    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 12))
-    
-    # 1. Fold별 예측 확률
-    colors = ['red' if t == 0 else 'blue' for t in true_labels]
-    ax1.scatter(folds, pred_probs, c=colors, s=100, alpha=0.7)
-    ax1.axhline(y=0.5, color='black', linestyle='--', alpha=0.5)
-    ax1.set_xlabel('Fold')
-    ax1.set_ylabel('Predicted Probability')
-    ax1.set_title('Predictions by Fold')
-    ax1.set_ylim([0, 1])
-    ax1.grid(True, alpha=0.3)
-    
-    # 범례 추가
-    from matplotlib.patches import Patch
-    legend_elements = [Patch(facecolor='red', label='BRAF-'),
-                      Patch(facecolor='blue', label='BRAF+')]
-    ax1.legend(handles=legend_elements)
-    
-    # 2. 정확도 막대 그래프
-    ax2.bar(folds, correct, color=['green' if c else 'red' for c in correct], alpha=0.7)
-    ax2.set_xlabel('Fold')
-    ax2.set_ylabel('Correct (1) / Incorrect (0)')
-    ax2.set_title('Prediction Accuracy by Fold')
-    ax2.set_ylim([0, 1.2])
-    ax2.grid(True, alpha=0.3)
-    
-    # 3. 예측 확률 분포
-    braf_pos_probs = [p for p, t in zip(pred_probs, true_labels) if t == 1]
-    braf_neg_probs = [p for p, t in zip(pred_probs, true_labels) if t == 0]
-    
-    ax3.hist(braf_neg_probs, bins=10, alpha=0.7, color='red', label='BRAF-', density=True)
-    ax3.hist(braf_pos_probs, bins=10, alpha=0.7, color='blue', label='BRAF+', density=True)
-    ax3.axvline(x=0.5, color='black', linestyle='--', alpha=0.5)
-    ax3.set_xlabel('Predicted Probability')
-    ax3.set_ylabel('Density')
-    ax3.set_title('Distribution of Predictions')
-    ax3.legend()
-    ax3.grid(True, alpha=0.3)
-    
-    # 4. 성능 요약
-    overall_acc = np.mean(correct)
-    if len(set(true_labels)) > 1:  # 두 클래스 모두 존재
-        from sklearn.metrics import roc_auc_score
-        overall_auc = roc_auc_score(true_labels, pred_probs)
-        auc_text = f"AUC: {overall_auc:.3f}"
+    # wsi_names가 None이면 첫 3개만 선택
+    if wsi_names is None:
+        wsi_names = list(attention_scores_dict.keys())[:3]
+        print(f"Processing first 3 WSIs: {wsi_names}")
     else:
-        auc_text = "AUC: N/A (단일 클래스)"
+        print(f"Processing {len(wsi_names)} specified WSIs")
     
-    ax4.text(0.1, 0.7, f"Overall Accuracy: {overall_acc:.3f}", fontsize=16, 
-             transform=ax4.transAxes)
-    ax4.text(0.1, 0.5, auc_text, fontsize=16, transform=ax4.transAxes)
-    ax4.text(0.1, 0.3, f"Total Folds: {len(cv_results)}", fontsize=16, 
-             transform=ax4.transAxes)
-    ax4.set_title('Overall Performance')
-    ax4.set_xlim([0, 1])
-    ax4.set_ylim([0, 1])
-    ax4.axis('off')
-    
-    plt.suptitle(title, fontsize=16, fontweight='bold')
-    plt.tight_layout()
-    
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"CV results saved to: {save_path}")
-    
-    return fig
-
-
-def plot_model_comparison(results_dict: Dict[str, Dict],
-                         save_path: Optional[str] = None,
-                         title: str = "Model Performance Comparison") -> plt.Figure:
-    """
-    여러 모델 성능 비교
-    
-    Args:
-        results_dict: {
-            'model_1': {'auc': 0.85, 'accuracy': 0.80, 'precision': 0.75, ...},
-            'model_2': {'auc': 0.90, 'accuracy': 0.85, 'precision': 0.80, ...}
-        }
-    """
-    # 메트릭들 추출
-    metrics = ['auc', 'accuracy', 'precision', 'recall', 'f1_score']
-    model_names = list(results_dict.keys())
-    
-    # 각 메트릭별 값들 추출
-    metric_values = {}
-    for metric in metrics:
-        metric_values[metric] = [results_dict[model].get(metric, 0) for model in model_names]
-    
-    # 시각화
-    fig, axes = plt.subplots(2, 3, figsize=(18, 12))
-    axes = axes.ravel()
-    
-    for i, metric in enumerate(metrics):
-        ax = axes[i]
-        bars = ax.bar(model_names, metric_values[metric], alpha=0.7)
-        ax.set_title(metric.upper().replace('_', ' '), fontsize=14, fontweight='bold')
-        ax.set_ylabel('Score', fontsize=12)
-        ax.set_ylim([0, 1])
-        ax.grid(True, alpha=0.3)
+    processed_count = 0
+    for wsi_name, wsi_data in attention_scores_dict.items():
+        # 특정 WSI만 처리
+        if wsi_name not in wsi_names:
+            continue
         
-        # 막대 위에 값 표시
-        for bar, value in zip(bars, metric_values[metric]):
-            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01,
-                   f'{value:.3f}', ha='center', va='bottom', fontsize=10)
+        processed_count += 1
         
-        # x축 레이블 회전
-        plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
+        # Attention scores와 메타데이터 추출
+        attention_scores = np.array(wsi_data['scores'])
+        n_patches = wsi_data['n_patches']
+        true_label = wsi_data.get('true_label', None)
+        pred_label = wsi_data.get('predicted_label', None)
+        pred_prob = wsi_data.get('pred_prob', None)
+        
+        print(f"\n[{processed_count}/3] {wsi_name}")
+        if true_label is not None:
+            print(f"  True: {'BRAF+' if true_label==1 else 'BRAF-'}", end="")
+        if pred_label is not None and pred_prob is not None:
+            print(f" | Pred: {'BRAF+' if pred_label==1 else 'BRAF-'} ({pred_prob:.3f})")
+        print(f"  Patches: {n_patches}")
+        print(f"  Score Range: [{attention_scores.min():.6f}, {attention_scores.max():.6f}]")
+        print(f"  Score Mean: {attention_scores.mean():.6f} ± {attention_scores.std():.6f}")
+        
+        # Figure 크기 계산
+        fig_width = n_cols * (thumbnail_size[0] / 100) * 1.1
+        fig_height = n_rows * (thumbnail_size[1] / 100) * 1.15
+        
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(fig_width, fig_height))
+        
+        # axes를 2D 배열로 변환
+        if n_rows == 1 and n_cols == 1:
+            axes = np.array([[axes]])
+        elif n_rows == 1:
+            axes = axes.reshape(1, -1)
+        elif n_cols == 1:
+            axes = axes.reshape(-1, 1)
+        
+        min_score = attention_scores.min()
+        max_score = attention_scores.max()
+        
+        # 각 패치 시각화
+        patches_found = 0
+        patches_missing = 0
+        
+        for patch_idx in range(min(n_patches, n_cols * n_rows)):
+            row = patch_idx // n_cols
+            col = patch_idx % n_cols
+            ax = axes[row, col]
+            
+            score = attention_scores[patch_idx]
+            
+            # 패치 이미지 로드
+            patch_path = get_patch_image_path(wsi_name, patch_idx, patch_base_dir)
+            
+            if patch_path and patch_path.exists():
+                # 원본 이미지 로드
+                img = Image.open(patch_path)
+                img = img.resize(thumbnail_size, Image.Resampling.LANCZOS)
+                
+                # Attention score 오버레이 추가
+                img_with_overlay = add_score_overlay(
+                    img, score, cmap, min_score, max_score, alpha=overlay_alpha
+                )
+                
+                ax.imshow(img_with_overlay)
+                patches_found += 1
+            else:
+                # 이미지가 없으면 colormap 색상으로만 채움
+                norm_score = (score - min_score) / (max_score - min_score + 1e-8)
+                color_rgba = cmap(norm_score)
+                color_rgb = color_rgba[:3]
+                
+                ax.imshow(np.ones((thumbnail_size[1], thumbnail_size[0], 3)) * color_rgb)
+                patches_missing += 1
+            
+            ax.axis('off')
+        
+        # 빈 subplot 제거
+        for i in range(n_patches, n_rows * n_cols):
+            row = i // n_cols
+            col = i % n_cols
+            if row < n_rows and col < n_cols:
+                fig.delaxes(axes[row, col])
+        
+        # 전체 제목
+        title_parts = [f'{wsi_name} - {n_patches} Patches']
+        if true_label is not None and pred_label is not None:
+            title_parts.append(
+                f'True: {"BRAF+" if true_label==1 else "BRAF-"} | '
+                f'Pred: {"BRAF+" if pred_label==1 else "BRAF-"} ({pred_prob:.3f})'
+            )
+        
+        fig.suptitle('\n'.join(title_parts), fontsize=14, fontweight='bold', y=0.995)
+        
+        # Colorbar 추가
+        sm = plt.cm.ScalarMappable(cmap=cmap, 
+                                  norm=plt.Normalize(vmin=min_score, vmax=max_score))
+        sm.set_array([])
+        
+        cbar_ax = fig.add_axes([0.15, 0.005, 0.7, 0.01])
+        cbar = fig.colorbar(sm, cax=cbar_ax, orientation='horizontal')
+        cbar.set_label(f'Attention Score: {min_score:.6f} → {max_score:.6f}', 
+                      fontsize=9, fontweight='bold')
+        cbar.ax.tick_params(labelsize=8)
+        
+        plt.subplots_adjust(left=0.01, right=0.99, top=0.975, bottom=0.025, 
+                          wspace=0.02, hspace=0.02)
+        
+        # 저장
+        save_path = save_dir / f"{wsi_name}_500patches_overlay.png"
+        plt.savefig(save_path, dpi=dpi, bbox_inches='tight')
+        plt.close()
+        
+        print(f"  ✓ Saved: {save_path.name}")
+        print(f"    Found: {patches_found}/{n_patches} patches", end="")
+        if patches_missing > 0:
+            print(f" | Missing: {patches_missing}")
+        else:
+            print()
     
-    # 마지막 subplot 제거
-    fig.delaxes(axes[-1])
+    print(f"\n{'='*80}")
+    print(f"[✓] All 500-patch attention overlays saved to:")
+    print(f"    {save_dir}")
+    print(f"{'='*80}\n")
     
-    plt.suptitle(title, fontsize=16, fontweight='bold')
-    plt.tight_layout()
-    
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Model comparison saved to: {save_path}")
-    
-    return fig
+    return save_dir
 
 
-def create_comprehensive_report(true_labels: List[int],
-                               predictions: List[float],
-                               cv_results: Optional[List[Dict]] = None,
-                               output_dir: str = "evaluation_results",
-                               experiment_name: str = "experiment") -> None:
-    """
-    종합적인 평가 리포트 생성
-    """
-    # 출력 디렉토리 생성
-    os.makedirs(output_dir, exist_ok=True)
-    
-    print(f"📊 Creating comprehensive evaluation report...")
-    print(f"Output directory: {output_dir}")
-    
-    # 1. Confusion Matrix
-    plot_confusion_matrix(
-        true_labels, predictions,
-        save_path=os.path.join(output_dir, f"{experiment_name}_confusion_matrix.png"),
-        title=f"{experiment_name} - Confusion Matrix"
-    )
-    
-    # 2. ROC Curve
-    plot_roc_curve(
-        true_labels, predictions,
-        save_path=os.path.join(output_dir, f"{experiment_name}_roc_curve.png"),
-        title=f"{experiment_name} - ROC Curve"
-    )
-    
-    # 3. Precision-Recall Curve
-    plot_precision_recall_curve(
-        true_labels, predictions,
-        save_path=os.path.join(output_dir, f"{experiment_name}_pr_curve.png"),
-        title=f"{experiment_name} - Precision-Recall Curve"
-    )
-    
-    # 4. Cross-Validation Results (있다면)
-    if cv_results:
-        plot_cross_validation_results(
-            cv_results,
-            save_path=os.path.join(output_dir, f"{experiment_name}_cv_results.png"),
-            title=f"{experiment_name} - Cross-Validation Results"
-        )
-    
-    print(f"✅ Report generated successfully!")
-    print(f"📁 Check results in: {output_dir}")
-
-
+# =========================
+# 사용 예시
+# =========================
 if __name__ == "__main__":
-    # 테스트용 예시 데이터
-    np.random.seed(42)
+    """
+    사용 예시: 원본 패치 이미지 + attention score 오버레이
+    """
     
-    # 예시 데이터 생성
-    true_labels = [1, 1, 1, 0, 0, 1, 0, 1, 0, 0]
-    predictions = [0.1, 0.3, 0.0, 1.0, 0.8, 0.9, 0.2, 0.7, 0.4, 0.1]
+    # 경로 설정
+    results_json_path = "/home/mts/ssd_16tb/member/jks/Thyroid_Mutation_model_v2/outputs/Thyroid_prediction_model_v0.2.0/results.json"
+    patch_base_dir = "/data/143/member/kwk/dl/thyroid/image/slide-v1-240412/patch"
+    save_dir = "./attention_visualizations"
     
-    cv_results = [
-        {'fold': 1, 'true_label': 1, 'pred_label': 0, 'avg_prob': 0.1},
-        {'fold': 2, 'true_label': 1, 'pred_label': 0, 'avg_prob': 0.3},
-        {'fold': 3, 'true_label': 1, 'pred_label': 0, 'avg_prob': 0.0},
-        {'fold': 4, 'true_label': 0, 'pred_label': 1, 'avg_prob': 1.0},
-    ]
-    
-    # 시각화 테스트
-    print("Testing visualization functions...")
-    
-    # 종합 리포트 생성
-    create_comprehensive_report(
-        true_labels=true_labels,
-        predictions=predictions,
-        cv_results=cv_results,
-        output_dir="test_results",
-        experiment_name="abmil_test"
+    # 기본 설정 (첫 3개 WSI)
+    visualize_500_patches_with_overlay(
+        results_json_path=results_json_path,
+        patch_base_dir=patch_base_dir,
+        save_dir=save_dir,
+        fold_num=1,
+        wsi_names=None,  # None이면 첫 3개 자동 선택
+        thumbnail_size=(96, 96),  # 각 패치 썸네일 크기
+        grid_layout=(25, 20),  # 25 cols × 20 rows = 500
+        overlay_alpha=0.4,  # 원본 60% + 오버레이 40%
+        dpi=200
     )
+    
+    # 더 강한 오버레이 효과 (원본이 덜 보임)
+    """
+    visualize_500_patches_with_overlay(
+        results_json_path=results_json_path,
+        patch_base_dir=patch_base_dir,
+        save_dir=save_dir,
+        fold_num=1,
+        wsi_names=['TC_04_7900'],
+        thumbnail_size=(128, 128),  # 더 큰 썸네일
+        grid_layout=(25, 20),
+        overlay_alpha=0.6,  # 원본 40% + 오버레이 60%
+        dpi=300
+    )
+    """

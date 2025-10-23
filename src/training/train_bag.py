@@ -1,18 +1,20 @@
 """
 active_code
 
-CUDA_VISIBLE_DEVICES=3 \
-python train_bag.py \
+no patch visualization version
+
+CUDA_VISIBLE_DEVICES=4 python train_bag.py \
   --data_root /data/143/member/jks/Thyroid_Mutation_dataset/embeddings \
-  --model_save_dir /home/mts/ssd_16tb/member/jks/Thyroid_Mutation_model/outputs/Thyroid_prediction_model_v0.1.4 \
-  --cv_split_file /home/mts/ssd_16tb/member/jks/Thyroid_Mutation_model/src/utils/cv_splits/cv_splits_k5_seed42.json_v.0.1.0 \
+  --model_save_dir /home/mts/ssd_16tb/member/jks/Thyroid_Mutation_model_v2/outputs/Thyroid_prediction_model_v0.2.0 \
+  --cv_split_file /home/mts/ssd_16tb/member/jks/Thyroid_Mutation_model_v2/src/utils/cv_splits/cv_splits_k5_seed42_.json_v0.2.0 \
   --epochs 100 \
   --lr 1e-5 \
-  --bag_size 2000 \
+  --bag_size 500 \
   --seed 42 \
   --save_model \
   --save_best_only \
   --debug
+
 """
 
 import os
@@ -23,19 +25,24 @@ import numpy as np
 from pathlib import Path
 from sklearn.metrics import (
     accuracy_score, roc_auc_score, precision_score, recall_score, f1_score,
-    confusion_matrix
+    confusion_matrix, roc_curve, precision_recall_curve, auc
 )
 import warnings
 import sys
 import json
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')
 
 warnings.filterwarnings('ignore')
 
+# 경로 설정
 current_dir = os.path.dirname(os.path.abspath(__file__))
 src_dir = os.path.dirname(current_dir)
 sys.path.insert(0, src_dir)
 sys.path.append(os.path.join(src_dir, 'models'))
 
+# Models & Utils import
 from abmil import ABMILModel, ABMILGatedBaseConfig
 from utils.datasets import ThyroidWSIDataset, set_seed
 from utils.metrics import comprehensive_evaluation
@@ -103,6 +110,264 @@ def compute_metrics_with_confusion(y_true, y_pred, y_prob):
         "fp": int(fp),
         "fn": int(fn)
     }
+
+
+# =========================
+# Visualization Functions
+# =========================
+def plot_roc_curves(fold_results, save_dir):
+    """각 fold별 ROC curve와 평균 ROC curve 그리기"""
+    plt.figure(figsize=(10, 8))
+    
+    tprs = []
+    aucs = []
+    mean_fpr = np.linspace(0, 1, 100)
+    
+    for fold_result in fold_results:
+        fold_num = fold_result['fold']
+        fpr = fold_result['test_fpr']
+        tpr = fold_result['test_tpr']
+        roc_auc = fold_result['test_metrics']['auc']
+        
+        # 각 fold의 ROC curve
+        plt.plot(fpr, tpr, alpha=0.3, label=f'Fold {fold_num} (AUC = {roc_auc:.3f})')
+        
+        # 평균 계산을 위해 interpolation
+        interp_tpr = np.interp(mean_fpr, fpr, tpr)
+        interp_tpr[0] = 0.0
+        tprs.append(interp_tpr)
+        aucs.append(roc_auc)
+    
+    # 평균 ROC curve
+    mean_tpr = np.mean(tprs, axis=0)
+    mean_tpr[-1] = 1.0
+    mean_auc = auc(mean_fpr, mean_tpr)
+    std_auc = np.std(aucs)
+    
+    plt.plot(mean_fpr, mean_tpr, color='b', linewidth=2,
+             label=f'Mean ROC (AUC = {mean_auc:.3f} ± {std_auc:.3f})')
+    
+    # 표준편차 영역
+    std_tpr = np.std(tprs, axis=0)
+    tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
+    tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
+    plt.fill_between(mean_fpr, tprs_lower, tprs_upper, color='grey', alpha=0.2,
+                     label='± 1 std. dev.')
+    
+    # 대각선 (random classifier)
+    plt.plot([0, 1], [0, 1], 'k--', label='Random Classifier')
+    
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate', fontsize=12)
+    plt.ylabel('True Positive Rate', fontsize=12)
+    plt.title('ROC Curves - Cross Validation', fontsize=14, fontweight='bold')
+    plt.legend(loc="lower right", fontsize=9)
+    plt.grid(alpha=0.3)
+    
+    save_path = Path(save_dir) / 'roc_curves.png'
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    print(f"[✓] ROC curves saved: {save_path}")
+
+
+def plot_precision_recall_curves(fold_results, save_dir):
+    """각 fold별 Precision-Recall curve 그리기"""
+    plt.figure(figsize=(10, 8))
+    
+    for fold_result in fold_results:
+        fold_num = fold_result['fold']
+        precision = fold_result['test_precision']
+        recall = fold_result['test_recall']
+        pr_auc = auc(recall, precision)
+        
+        plt.plot(recall, precision, alpha=0.5, linewidth=2,
+                label=f'Fold {fold_num} (AUC = {pr_auc:.3f})')
+    
+    plt.xlabel('Recall', fontsize=12)
+    plt.ylabel('Precision', fontsize=12)
+    plt.title('Precision-Recall Curves - Cross Validation', fontsize=14, fontweight='bold')
+    plt.legend(loc="best", fontsize=9)
+    plt.grid(alpha=0.3)
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    
+    save_path = Path(save_dir) / 'precision_recall_curves.png'
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    print(f"[✓] Precision-Recall curves saved: {save_path}")
+
+
+def plot_training_curves(fold_results, save_dir):
+    """각 fold별 학습 곡선 (Loss, AUC, Accuracy) 그리기 - Train/Val/Test 포함"""
+    n_folds = len(fold_results)
+    fig, axes = plt.subplots(n_folds, 3, figsize=(18, 4*n_folds))
+    
+    if n_folds == 1:
+        axes = axes.reshape(1, -1)
+    
+    for idx, fold_result in enumerate(fold_results):
+        fold_num = fold_result['fold']
+        history = fold_result['history']
+        best_epoch = fold_result['best_epoch']
+        
+        epochs = range(1, len(history['train_loss']) + 1)
+        
+        # Loss
+        axes[idx, 0].plot(epochs, history['train_loss'], 'b-', label='Train Loss', linewidth=2)
+        axes[idx, 0].plot(epochs, history['val_loss'], 'r-', label='Val Loss', linewidth=2)
+        # Best epoch에 test loss 표시
+        if 'test_loss' in fold_result['test_metrics']:
+            axes[idx, 0].scatter([best_epoch], [fold_result['test_metrics']['test_loss']], 
+                               color='green', s=100, marker='*', label='Test Loss', zorder=5)
+        axes[idx, 0].axvline(x=best_epoch, color='gray', linestyle='--', alpha=0.5, label=f'Best Epoch ({best_epoch})')
+        axes[idx, 0].set_xlabel('Epoch', fontsize=10)
+        axes[idx, 0].set_ylabel('Loss', fontsize=10)
+        axes[idx, 0].set_title(f'Fold {fold_num} - Loss', fontsize=11, fontweight='bold')
+        axes[idx, 0].legend(fontsize=8)
+        axes[idx, 0].grid(alpha=0.3)
+        
+        # AUC
+        axes[idx, 1].plot(epochs, history['train_auc'], 'b-', label='Train AUC', linewidth=2)
+        axes[idx, 1].plot(epochs, history['val_auc'], 'r-', label='Val AUC', linewidth=2)
+        # Best epoch에 test AUC 표시
+        test_auc = fold_result['test_metrics']['auc']
+        axes[idx, 1].scatter([best_epoch], [test_auc], 
+                           color='green', s=100, marker='*', label=f'Test AUC ({test_auc:.3f})', zorder=5)
+        axes[idx, 1].axvline(x=best_epoch, color='gray', linestyle='--', alpha=0.5, label=f'Best Epoch ({best_epoch})')
+        axes[idx, 1].set_xlabel('Epoch', fontsize=10)
+        axes[idx, 1].set_ylabel('AUC', fontsize=10)
+        axes[idx, 1].set_title(f'Fold {fold_num} - AUC', fontsize=11, fontweight='bold')
+        axes[idx, 1].legend(fontsize=8)
+        axes[idx, 1].grid(alpha=0.3)
+        axes[idx, 1].set_ylim([0, 1.05])
+        
+        # Accuracy
+        axes[idx, 2].plot(epochs, history['train_acc'], 'b-', label='Train Acc', linewidth=2)
+        axes[idx, 2].plot(epochs, history['val_acc'], 'r-', label='Val Acc', linewidth=2)
+        # Best epoch에 test accuracy 표시
+        test_acc = fold_result['test_metrics']['accuracy']
+        axes[idx, 2].scatter([best_epoch], [test_acc], 
+                           color='green', s=100, marker='*', label=f'Test Acc ({test_acc:.3f})', zorder=5)
+        axes[idx, 2].axvline(x=best_epoch, color='gray', linestyle='--', alpha=0.5, label=f'Best Epoch ({best_epoch})')
+        axes[idx, 2].set_xlabel('Epoch', fontsize=10)
+        axes[idx, 2].set_ylabel('Accuracy', fontsize=10)
+        axes[idx, 2].set_title(f'Fold {fold_num} - Accuracy', fontsize=11, fontweight='bold')
+        axes[idx, 2].legend(fontsize=8)
+        axes[idx, 2].grid(alpha=0.3)
+        axes[idx, 2].set_ylim([0, 1.05])
+    
+    plt.tight_layout()
+    save_path = Path(save_dir) / 'training_curves.png'
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    print(f"[✓] Training curves saved: {save_path}")
+
+
+def plot_metric_comparison(fold_results, save_dir):
+    """각 fold별 최종 train/val/test metrics 비교 bar plot"""
+    metrics = ['accuracy', 'auc', 'sensitivity', 'specificity', 'ppv', 'npv', 'f1']
+    metric_names = ['Accuracy', 'AUC', 'Sensitivity', 'Specificity', 'PPV', 'NPV', 'F1']
+    
+    fig, axes = plt.subplots(2, 4, figsize=(20, 10))
+    axes = axes.flatten()
+    
+    for idx, (metric, name) in enumerate(zip(metrics, metric_names)):
+        fold_nums = [r['fold'] for r in fold_results]
+        
+        # Train, Val, Test 값 추출
+        train_values = [r['best_train_metrics'][metric] for r in fold_results]
+        val_values = [r['best_val_metrics'][metric] for r in fold_results]
+        test_values = [r['test_metrics'][metric] for r in fold_results]
+        
+        x = np.arange(len(fold_nums))
+        width = 0.25
+        
+        # Bar plot
+        bars1 = axes[idx].bar(x - width, train_values, width, label='Train', color='skyblue', alpha=0.8)
+        bars2 = axes[idx].bar(x, val_values, width, label='Val', color='orange', alpha=0.8)
+        bars3 = axes[idx].bar(x + width, test_values, width, label='Test', color='lightgreen', alpha=0.8)
+        
+        # 평균선
+        axes[idx].axhline(y=np.mean(train_values), color='blue', linestyle='--', alpha=0.5, linewidth=1)
+        axes[idx].axhline(y=np.mean(val_values), color='red', linestyle='--', alpha=0.5, linewidth=1)
+        axes[idx].axhline(y=np.mean(test_values), color='green', linestyle='--', alpha=0.5, linewidth=1,
+                         label=f'Test Mean: {np.mean(test_values):.3f}')
+        
+        axes[idx].set_xlabel('Fold', fontsize=10)
+        axes[idx].set_ylabel(name, fontsize=10)
+        axes[idx].set_title(f'{name} Comparison', fontsize=11, fontweight='bold')
+        axes[idx].set_xticks(x)
+        axes[idx].set_xticklabels(fold_nums)
+        axes[idx].set_ylim([0, 1.05])
+        axes[idx].legend(fontsize=8)
+        axes[idx].grid(alpha=0.3, axis='y')
+        
+        # 각 bar 위에 값 표시 (test만)
+        for bar, val in zip(bars3, test_values):
+            height = bar.get_height()
+            axes[idx].text(bar.get_x() + bar.get_width()/2., height + 0.02,
+                          f'{val:.3f}', ha='center', va='bottom', fontsize=8)
+    
+    # 마지막 subplot 제거
+    fig.delaxes(axes[-1])
+    
+    plt.tight_layout()
+    save_path = Path(save_dir) / 'metric_comparison.png'
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    print(f"[✓] Metric comparison saved: {save_path}")
+
+
+def plot_confusion_matrices(fold_results, save_dir):
+    """각 fold별 confusion matrix 시각화"""
+    n_folds = len(fold_results)
+    cols = min(3, n_folds)
+    rows = (n_folds + cols - 1) // cols
+    
+    fig, axes = plt.subplots(rows, cols, figsize=(5*cols, 4*rows))
+    if n_folds == 1:
+        axes = [axes]
+    else:
+        axes = axes.flatten()
+    
+    for idx, fold_result in enumerate(fold_results):
+        fold_num = fold_result['fold']
+        metrics = fold_result['test_metrics']
+        
+        cm = np.array([[metrics['tn'], metrics['fp']],
+                       [metrics['fn'], metrics['tp']]])
+        
+        im = axes[idx].imshow(cm, interpolation='nearest', cmap='Blues')
+        axes[idx].set_title(f'Fold {fold_num} Confusion Matrix')
+        
+        # 색상 바
+        plt.colorbar(im, ax=axes[idx], fraction=0.046, pad=0.04)
+        
+        # 축 레이블
+        axes[idx].set_xticks([0, 1])
+        axes[idx].set_yticks([0, 1])
+        axes[idx].set_xticklabels(['Predicted Neg', 'Predicted Pos'])
+        axes[idx].set_yticklabels(['Actual Neg', 'Actual Pos'])
+        
+        # 값 표시
+        thresh = cm.max() / 2.
+        for i in range(2):
+            for j in range(2):
+                axes[idx].text(j, i, format(cm[i, j], 'd'),
+                             ha="center", va="center",
+                             color="white" if cm[i, j] > thresh else "black",
+                             fontsize=14, fontweight='bold')
+    
+    # 사용하지 않는 subplot 제거
+    for idx in range(n_folds, len(axes)):
+        fig.delaxes(axes[idx])
+    
+    plt.tight_layout()
+    save_path = Path(save_dir) / 'confusion_matrices.png'
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    print(f"[✓] Confusion matrices saved: {save_path}")
 
 
 # =========================
@@ -264,7 +529,6 @@ def check_data_leakage(cv_splits):
     for fold_data in cv_splits['folds']:
         fold_num = fold_data['fold']
         
-        # 파일명만 추출 (경로 제거)
         train_files = set([os.path.basename(p) for p in fold_data['train_wsis_paths']])
         val_files = set([os.path.basename(p) for p in fold_data['val_wsis_paths']])
         test_files = set([os.path.basename(p) for p in fold_data['test_wsis_paths']])
@@ -275,7 +539,6 @@ def check_data_leakage(cv_splits):
         print(f"  Test:  {len(test_files):3d} files")
         print(f"  Total: {len(train_files) + len(val_files) + len(test_files):3d} files")
         
-        # Overlap 체크
         train_val_overlap = train_files & val_files
         train_test_overlap = train_files & test_files
         val_test_overlap = val_files & test_files
@@ -315,7 +578,7 @@ def check_data_leakage(cv_splits):
 
 
 def check_label_distribution(cv_splits, data_root, bag_size):
-    """각 fold의 label 분포 확인"""
+    """각 fold의 label 분포 확인 (JSON 데이터 직접 사용)"""
     print("\n" + "="*80)
     print("Label Distribution Analysis")
     print("="*80)
@@ -325,21 +588,18 @@ def check_label_distribution(cv_splits, data_root, bag_size):
         
         print(f"\nFold {fold_num}:")
         
-        for split_name in ['train', 'val', 'test']:
-            paths = fold_data[f'{split_name}_wsis_paths']
-            dataset = ThyroidWSIDataset(paths, bag_size=bag_size, use_variance=False)
-            
-            labels = [dataset[i][1].item() for i in range(len(dataset))]
-            pos_count = sum(labels)
-            neg_count = len(labels) - pos_count
-            pos_ratio = pos_count / len(labels) * 100 if len(labels) > 0 else 0
-            
-            print(f"  {split_name.capitalize():5s}: Pos={pos_count:3d} ({pos_ratio:5.1f}%), "
-                  f"Neg={neg_count:3d} ({100-pos_ratio:5.1f}%), Total={len(labels):3d}")
+        # JSON에 이미 pos/neg count가 있음!
+        print(f"  Train: Pos={fold_data['train_pos_count']:3d} ({fold_data['train_pos_count']/fold_data['train_count']*100:5.1f}%), "
+              f"Neg={fold_data['train_neg_count']:3d} ({fold_data['train_neg_count']/fold_data['train_count']*100:5.1f}%), "
+              f"Total={fold_data['train_count']:3d}")
+        print(f"  Val  : Pos={fold_data['val_pos_count']:3d} ({fold_data['val_pos_count']/fold_data['val_count']*100:5.1f}%), "
+              f"Neg={fold_data['val_neg_count']:3d} ({fold_data['val_neg_count']/fold_data['val_count']*100:5.1f}%), "
+              f"Total={fold_data['val_count']:3d}")
+        print(f"  Test : Pos={fold_data['test_pos_count']:3d} ({fold_data['test_pos_count']/fold_data['test_count']*100:5.1f}%), "
+              f"Neg={fold_data['test_neg_count']:3d} ({fold_data['test_neg_count']/fold_data['test_count']*100:5.1f}%), "
+              f"Total={fold_data['test_count']:3d}")
     
     print("\n" + "="*80 + "\n")
-
-
 
 # =========================
 # Run K-Fold CV
@@ -373,6 +633,12 @@ def run_k_fold_cv(cv_splits, args, device):
 
         best_train_metrics, best_val_metrics = {}, {}
         best_epoch = 0
+        
+        # History 기록용
+        history = {
+            'train_loss': [], 'train_acc': [], 'train_auc': [],
+            'val_loss': [], 'val_acc': [], 'val_auc': []
+        }
 
         print(f"\n{'─'*80}")
         print(f"Starting training for Fold {fold_data['fold']}")
@@ -382,6 +648,14 @@ def run_k_fold_cv(cv_splits, args, device):
             train_metrics = run_one_epoch(model, train_loader, device, optimizer, train=True)
             val_metrics = run_one_epoch(model, val_loader, device, train=False)
             scheduler.step(val_metrics["loss"])
+            
+            # History 저장
+            history['train_loss'].append(train_metrics['loss'])
+            history['train_acc'].append(train_metrics['accuracy'])
+            history['train_auc'].append(train_metrics['auc'])
+            history['val_loss'].append(val_metrics['loss'])
+            history['val_acc'].append(val_metrics['accuracy'])
+            history['val_auc'].append(val_metrics['auc'])
             
             print(f"Epoch [{epoch+1:3d}/{args.epochs}] | "
                   f"Train Loss: {train_metrics['loss']:.4f} | "
@@ -411,6 +685,10 @@ def run_k_fold_cv(cv_splits, args, device):
         
         test_probs, test_labels, test_preds = evaluate_model(model, test_loader, device)
         test_metrics = compute_metrics_with_confusion(test_labels, test_preds, test_probs)
+        
+        # ROC curve와 Precision-Recall curve 데이터 계산
+        fpr, tpr, _ = roc_curve(test_labels, test_probs)
+        precision, recall, _ = precision_recall_curve(test_labels, test_probs)
 
         print(f"\n📊 Test Results:")
         print(f"  AUC:         {test_metrics['auc']:.4f}")
@@ -435,7 +713,12 @@ def run_k_fold_cv(cv_splits, args, device):
             "best_epoch": best_epoch,
             "best_train_metrics": best_train_metrics,
             "best_val_metrics": best_val_metrics,
-            "test_metrics": test_metrics
+            "test_metrics": test_metrics,
+            "history": history,
+            "test_fpr": fpr.tolist(),
+            "test_tpr": tpr.tolist(),
+            "test_precision": precision.tolist(),
+            "test_recall": recall.tolist()
         }
 
         all_fold_results.append(fold_result)
@@ -452,9 +735,6 @@ def run_k_fold_cv(cv_splits, args, device):
                 path = save_model_checkpoint(model, fold_idx, fold_result, args.model_save_dir, args)
                 saved_model_paths.append(path)
                 print(f"✓ Model checkpoint saved")
-
-
-
 
     # ==========================================
     # 전체 Summary 계산
@@ -503,23 +783,6 @@ def run_k_fold_cv(cv_splits, args, device):
             row += f" **{mean_val:.3f} ± {std_val:.3f}** |"
         print(row)
     
-    # ==========================================
-    # Fold별 상세 표
-    # ==========================================
-    print(f"\n\n{'='*80}")
-    print(f"WSI Instance Fold-by-Fold Results")
-    print(f"{'='*80}\n")
-    
-    for fold_result in all_fold_results:
-        print(f"fold {fold_result['fold']}.")
-        print_fold_table(
-            fold_result['fold'],
-            fold_result['best_train_metrics'],
-            fold_result['best_val_metrics'],
-            fold_result['test_metrics']
-        )
-        print()
-    
     # Total Confusion Matrix
     print(f"\n{'─'*80}")
     print(f"Total Confusion Matrix (Test):")
@@ -567,6 +830,7 @@ def main():
     parser.add_argument('--save_best_only', action='store_true')
     parser.add_argument('--debug', action='store_true')
     args = parser.parse_args()
+    
 
     set_seed(args.seed)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -586,15 +850,31 @@ def main():
             print("Training aborted.")
             return
     
-    # ✅ summary_stats 추가로 받음
+    # Cross-validation 실행
     fold_results, predictions, true_labels, model_paths, summary_stats = run_k_fold_cv(cv_splits, args, device)
+
+    # ==========================================
+    # Visualization 생성
+    # ==========================================
+    print(f"\n{'='*80}")
+    print(f"Generating Visualization Plots")
+    print(f"{'='*80}\n")
+    
+    viz_dir = Path(args.model_save_dir) / "visualizations"
+    viz_dir.mkdir(parents=True, exist_ok=True)
+    
+    plot_roc_curves(fold_results, viz_dir)
+    plot_precision_recall_curves(fold_results, viz_dir)
+    plot_training_curves(fold_results, viz_dir)
+    plot_metric_comparison(fold_results, viz_dir)
+    plot_confusion_matrices(fold_results, viz_dir)
 
     # ==========================================
     # JSON 결과 구성
     # ==========================================
     results = {
-        "summary_statistics": summary_stats,  # ✅ Train/Val/Test 평균±표준편차
-        "folds": fold_results,                # ✅ 각 fold 상세 결과
+        "summary_statistics": summary_stats,
+        "folds": fold_results,
     }
     
     # Final aggregated results
@@ -619,6 +899,7 @@ def main():
     if args.save_model and model_paths:
         print(f"[✓] Saved {len(model_paths)} model checkpoints")
 
+    print(f"\n[✓] All visualizations saved in: {viz_dir}")
     print("\n[✓] Training completed!")
 
 
