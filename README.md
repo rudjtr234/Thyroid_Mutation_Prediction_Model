@@ -81,13 +81,13 @@ WSI(Whole Slide Image) 임베딩 파이프라인과,
 
 ### 🔹 ABMIL 모델 구조
 
-  WSI
+WSI
  └── Tile Embeddings (N × 1536)
         ↓
      Feature Encoder (FC Layer)
         ↓
      Attention Module
-        ├── tanh( Wv * v_i + b_v )
+        ├── tanh( W_v * v_i + b_v )
         └── sigmoid( W_u * v_i + b_u )
         ↓
      Weighted Aggregation (Σ α_i * v_i)
