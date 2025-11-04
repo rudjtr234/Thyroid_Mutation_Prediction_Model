@@ -1,5 +1,12 @@
 """
 WSI-level training script using full NPY files (no bag sampling)
+✅ COMPLETE VERSION with auto WSI selection
+✨ Modified: Pure attention heatmap only (no thumbnail) for best fold
+✨ Visualize: 1 correct + 1 incorrect prediction from test set
+
+start run.sh
+
+
 """
 
 import os
@@ -41,16 +48,16 @@ from utils.datasets import set_seed
 from utils.datasets_wsi import WSIFullDataset, load_json_splits_wsi, _infer_label
 from utils.metrics import comprehensive_evaluation
 
-# Visualization import (선택적)
+# Visualization import
 evaluation_dir = os.path.join(src_dir, 'evaluation')
 sys.path.insert(0, evaluation_dir)
 
 try:
     from visualization_wsi import visualize_wsi_attention_thumbnail
-    VISUALIZATION_WSI_AVAILABLE = True
+    VISUALIZATION_AVAILABLE = True
 except ImportError:
-    print("[!] Warning: visualization_wsi.py not found. WSI thumbnail visualization will be skipped.")
-    VISUALIZATION_WSI_AVAILABLE = False
+    print("[!] Warning: visualization_wsi.py not found. Heatmap visualization will be skipped.")
+    VISUALIZATION_AVAILABLE = False
 
 
 # =========================
@@ -107,9 +114,6 @@ def compute_metrics_with_confusion(y_true, y_pred, y_prob) -> Dict[str, float]:
 # Epoch Execution
 # =========================
 
-# ===============================
-# run_one_epoch 함수 수정
-# ===============================
 def run_one_epoch(
     model: nn.Module,
     dataloader: DataLoader,
@@ -137,21 +141,13 @@ def run_one_epoch(
                 filename = filename[0]
             filename_str = str(filename)
 
-            # ==========================================
-            # Full NPY 모드: 배치 차원 제거
-            # features: (1, N, D) -> (N, D) 필요 없음! 배치 유지
-            # label: (1,) -> scalar 필요 없음! 배치 유지
-            # ==========================================
-            # ABMIL v2는 배치 처리를 지원하므로 squeeze 하지 않음
-            
             if debug and batch_idx == 0:
-                print(f"[DEBUG] Feature shape: {features.shape}")  # (1, N, 1536)
-                print(f"  Label shape: {label.shape}")  # (1,)
+                print(f"[DEBUG] Feature shape: {features.shape}")
+                print(f"  Label shape: {label.shape}")
                 print(f"  Label value: {label.item()}")
 
             if train:
                 optimizer.zero_grad()
-                # Training mode: return_extra=False (DDP-safe)
                 logits, loss = model(
                     h=features,
                     loss_fn=loss_fn,
@@ -161,7 +157,6 @@ def run_one_epoch(
                 loss.backward()
                 optimizer.step()
             else:
-                # Evaluation mode: return_extra=False for consistency
                 logits, loss = model(
                     h=features,
                     loss_fn=loss_fn,
@@ -171,7 +166,6 @@ def run_one_epoch(
 
             total_loss += loss.item()
             
-            # logits shape: (batch, num_classes) = (1, 2)
             probs = torch.softmax(logits, dim=1)[:, 1]
             preds = torch.argmax(logits, dim=1)
 
@@ -191,7 +185,6 @@ def run_one_epoch(
     if return_details:
         return metrics, wsi_probs, wsi_labels, wsi_preds, wsi_names
     return metrics
-
 
 
 # =========================
@@ -665,6 +658,10 @@ def run_k_fold_cv(cv_splits, args, device):
             'test_tpr': tpr,
             'test_precision': precision,
             'test_recall': recall,
+            # ✨ Visualization을 위해 저장
+            'model_state': model.state_dict(),
+            'test_dataset': test_dataset,
+            'fold_data': fold_data,
         }
 
         all_fold_results.append(fold_result)
@@ -678,75 +675,7 @@ def run_k_fold_cv(cv_splits, args, device):
         )
         print_fold_table(fold_data['fold'], best_train_metrics, best_val_metrics, test_metrics)
 
-# ===============================
-# WSI Thumbnail Visualization 부분 수정
-# ===============================
-# run_k_fold_cv 함수 내부의 시각화 부분:
-
-        # ================================
-        # ✨ WSI Thumbnail Visualization ✨
-        # ================================
-        if fold_data['fold'] == 1 and VISUALIZATION_WSI_AVAILABLE:
-            print(f"\n{'─'*80}")
-            print(f"Generating WSI Attention Thumbnails")
-            print(f"{'─'*80}")
-            
-            # 시각화할 WSI 선택 (test set의 BRAF+ 샘플)
-            target_wsi_names = ['TC_04_3712', 'TC_04_4612', 'TC_04_5975']
-            
-            viz_dir = Path(args.model_save_dir) / "wsi_thumbnails"
-            
-            # 모델을 evaluation 모드로 설정
-            model.eval()
-            
-            # Attention scores 수집
-            attention_dict = {}
-            with torch.no_grad():
-                for features, label, filename in test_loader:
-                    wsi_name = filename[0] if isinstance(filename, (list, tuple)) else filename
-                    wsi_name = Path(wsi_name).stem
-                    
-                    if wsi_name not in target_wsi_names:
-                        continue
-                    
-                    features = features.to(device)
-                    
-                    # ✨ return_extra=True로 attention 가져오기
-                    outputs = model(
-                        h=features,
-                        loss_fn=None,
-                        label=None,
-                        return_attention=True,
-                        return_extra=True
-                    )
-                    
-                    # ✨ 새로운 구조: outputs['attention']
-                    if outputs['attention'] is not None:
-                        # attention shape: (1, 1, N) -> (N,)
-                        attn_scores = outputs['attention'].squeeze().cpu().numpy()
-                        attention_dict[wsi_name] = attn_scores
-            
-            try:
-                visualize_wsi_attention_thumbnail(
-                    model=model,
-                    dataloader=test_loader,
-                    device=device,
-                    patch_base_dir=args.patch_dir,
-                    save_dir=viz_dir,
-                    fold_num=fold_data['fold'],
-                    wsi_names=target_wsi_names,
-                    max_thumbnail_size=2048,
-                    grid_cols=None,
-                    overlay_alpha=0.5,
-                    show_colorbar=True,
-                    precomputed_attention=attention_dict  # ✨ 미리 계산한 attention 전달
-                )
-            except Exception as e:
-                print(f"[!] Warning: Failed to generate WSI thumbnails: {e}")
-                import traceback
-                traceback.print_exc()
-
-                
+        # 모델 저장
         if args.save_model:
             if args.save_best_only:
                 prev_best = max((r['test_metrics']['auc'] for r in all_fold_results[:-1]), default=-float('inf'))
@@ -756,6 +685,159 @@ def run_k_fold_cv(cv_splits, args, device):
             else:
                 path = save_model_checkpoint(model, fold_idx, fold_result, args.model_save_dir, args)
                 saved_model_paths.append(path)
+
+    # ================================
+    # ✨ Best Fold에서만 Attention Heatmap 생성 (정답 2개 + 오답 2개)
+    # ================================
+    if VISUALIZATION_AVAILABLE and all_fold_results:
+        print(f"\n{'='*80}")
+        print(f"Generating Attention Heatmaps for Best Fold")
+        print(f"{'='*80}\n")
+        
+        # Best fold 찾기
+        best_fold_result = max(all_fold_results, key=lambda x: x['test_metrics']['auc'])
+        best_fold_num = best_fold_result['fold']
+        best_auc = best_fold_result['test_metrics']['auc']
+        
+        print(f"  Best Fold: {best_fold_num} (Test AUC: {best_auc:.4f})")
+        
+        viz_dir = Path(args.model_save_dir) / "attention_heatmaps"
+        viz_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Best fold의 model 복원
+        best_model = ABMILModel(config).to(device)
+        best_model.load_state_dict(best_fold_result['model_state'])
+        best_model.eval()
+        
+        test_dataset = best_fold_result['test_dataset']
+        
+        # Test loader 생성
+        test_loader_viz = DataLoader(
+            test_dataset, 
+            batch_size=1, 
+            shuffle=False, 
+            num_workers=4, 
+            pin_memory=True
+        )
+        
+        print("\n  Collecting attention scores and predictions...")
+        
+        # Attention + Prediction 수집
+        attention_dict = {}
+        prediction_dict = {}
+        
+        with torch.no_grad():
+            for batch_idx, (features, label, filename) in enumerate(test_loader_viz):
+                wsi_name = filename[0] if isinstance(filename, (list, tuple)) else filename
+                wsi_name = Path(wsi_name).stem
+                
+                features = features.to(device)
+                true_label = label.item()
+                
+                try:
+                    outputs = best_model(
+                        h=features,
+                        loss_fn=None,
+                        label=None,
+                        return_attention=True,
+                        return_extra=True
+                    )
+                    
+                    if isinstance(outputs, dict) and 'attention' in outputs and outputs['attention'] is not None:
+                        attention = outputs['attention']
+                        logits = outputs.get('logits', outputs.get('output'))
+                        
+                        # Attention 추출
+                        attn_scores = attention[0, 0, :].cpu().numpy()
+                        attention_dict[wsi_name] = attn_scores
+                        
+                        # Prediction 계산
+                        probs = torch.softmax(logits, dim=1)
+                        pred_label = torch.argmax(probs, dim=1).item()
+                        pred_prob = probs[0, 1].item()
+                        is_correct = (pred_label == true_label)
+                        
+                        # Prediction 정보 저장
+                        prediction_dict[wsi_name] = {
+                            'label': true_label,
+                            'prediction': pred_label,
+                            'probability': pred_prob,
+                            'is_correct': is_correct
+                        }
+                        
+                        status = "✅" if is_correct else "❌"
+                        print(f"    {status} {wsi_name}: Label={true_label}, Pred={pred_label}, "
+                              f"Prob={pred_prob:.4f}, Patches={attn_scores.shape[0]}")
+                    else:
+                        print(f"    ⚠ No attention for {wsi_name} (skipping)")
+                        
+                except Exception as e:
+                    if args.debug:
+                        print(f"    ✗ Error for {wsi_name}: {e}")
+                        import traceback
+                        traceback.print_exc()
+        
+        print(f"\n  Collected {len(attention_dict)} WSIs")
+        
+        # 통계
+        correct_count = sum(1 for p in prediction_dict.values() if p['is_correct'])
+        incorrect_count = len(prediction_dict) - correct_count
+        print(f"  ✓ Correct: {correct_count}, Incorrect: {incorrect_count}")
+        
+        if attention_dict:
+            # Attention + Prediction JSON 저장
+            save_data = {
+                'fold': best_fold_num,
+                'test_auc': best_auc,
+                'attention_scores': {k: v.tolist() for k, v in attention_dict.items()},
+                'prediction_results': prediction_dict
+            }
+            
+            attention_json_path = viz_dir / f"attention_data_best_fold{best_fold_num}.json"
+            with open(attention_json_path, 'w') as f:
+                json.dump(save_data, f, indent=2)
+            
+            print(f"\n  ✓ Attention + Prediction data saved: {attention_json_path}")
+            
+            # 🔥 visualization_wsi.py의 함수 호출
+            print(f"\n  Generating heatmaps using visualization_wsi.py...")
+            try:
+                # Test loader 다시 생성 (이미 소진됨)
+                test_loader_viz2 = DataLoader(
+                    test_dataset, 
+                    batch_size=1, 
+                    shuffle=False, 
+                    num_workers=4, 
+                    pin_memory=True
+                )
+                
+                visualize_wsi_attention_thumbnail(
+                    model=best_model,
+                    dataloader=test_loader_viz2,
+                    device=device,
+                    patch_base_dir=args.patch_dir,
+                    save_dir=viz_dir,
+                    fold_num=best_fold_num,
+                    wsi_names=list(attention_dict.keys()),
+                    max_thumbnail_size=2048,
+                    overlay_alpha=0.5,
+                    show_colorbar=True,
+                    precomputed_attention=attention_dict,
+                    prediction_results=prediction_dict
+                )
+                print(f"\n  ✓ Heatmaps saved to: {viz_dir}")
+            except Exception as e:
+                print(f"\n  [!] Warning: Failed to generate heatmaps: {e}")
+                if args.debug:
+                    import traceback
+                    traceback.print_exc()
+        else:
+            print("\n  ⚠ No valid attention data collected")
+            print("      Skipping visualization")
+        
+        # 메모리 정리
+        del best_model
+        torch.cuda.empty_cache()
 
     return all_fold_results, all_predictions, all_true_labels, saved_model_paths
 
@@ -767,39 +849,19 @@ def run_k_fold_cv(cv_splits, args, device):
 def main():
     parser = argparse.ArgumentParser(description='WSI-level training script using full NPY files')
     
-    # Data arguments
-    parser.add_argument('--data_root', type=str, required=True,
-                       help='Root directory containing WSI embeddings')
-    parser.add_argument('--cv_split_file', type=str, required=True,
-                       help='Path to CV split JSON file')
+    parser.add_argument('--data_root', type=str, required=True)
+    parser.add_argument('--cv_split_file', type=str, required=True)
     parser.add_argument('--patch_dir', type=str, 
-                       default="/data/143/member/kwk/dl/thyroid/image/slide-v1-240412/patch",
-                       help='Patch image directory for WSI thumbnail visualization')
-    
-    # Model save arguments
+                       default="/data/143/member/kwk/dl/thyroid/image/slide-v1-240412/patch")
     parser.add_argument('--model_save_dir', type=str,
-                       default='/home/mts/ssd_16tb/member/jks/Thyroid_Mutation_model/outputs/Thyroid_prediction_model_v0.3.0_full_npy',
-                       help='Directory to save model checkpoints and results')
-    
-    # Training arguments
-    parser.add_argument('--epochs', type=int, default=100,
-                       help='Number of training epochs')
-    parser.add_argument('--lr', type=float, default=1e-4,
-                       help='Learning rate')
-    parser.add_argument('--patience', type=int, default=25,
-                       help='Early stopping patience')
-    parser.add_argument('--seed', type=int, default=42,
-                       help='Random seed for reproducibility')
-    
-    # Save options
-    parser.add_argument('--save_model', action='store_true',
-                       help='Save model checkpoints')
-    parser.add_argument('--save_best_only', action='store_true',
-                       help='Save only the best model across folds')
-    
-    # Debug option
-    parser.add_argument('--debug', action='store_true',
-                       help='Enable debug mode with verbose output')
+                       default='/home/mts/ssd_16tb/member/jks/Thyroid_Mutation_model/outputs/Thyroid_prediction_model_v0.3.0_full_npy')
+    parser.add_argument('--epochs', type=int, default=100)
+    parser.add_argument('--lr', type=float, default=1e-4)
+    parser.add_argument('--patience', type=int, default=25)
+    parser.add_argument('--seed', type=int, default=42)
+    parser.add_argument('--save_model', action='store_true')
+    parser.add_argument('--save_best_only', action='store_true')
+    parser.add_argument('--debug', action='store_true')
     
     args = parser.parse_args()
 
@@ -808,7 +870,6 @@ def main():
         for k, v in vars(args).items():
             print(f"  {k}: {v}")
 
-            
     set_seed(args.seed)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
@@ -881,9 +942,19 @@ def main():
     print(f"  TP: {total_tp:4d} | FN: {total_fn:4d}")
     print(f"  FP: {total_fp:4d} | TN: {total_tn:4d}")
 
+    # JSON serialization을 위해 fold_results에서 non-serializable 항목 제거
+    fold_results_for_json = []
+    for fold_result in fold_results:
+        fold_result_clean = fold_result.copy()
+        # Tensor와 Dataset 객체 제거
+        fold_result_clean.pop('model_state', None)
+        fold_result_clean.pop('test_dataset', None)
+        fold_result_clean.pop('fold_data', None)
+        fold_results_for_json.append(fold_result_clean)
+    
     results = {
         "summary_statistics": summary_stats,
-        "folds": fold_results,
+        "folds": fold_results_for_json,
         "mode": "full_npy",
     }
 

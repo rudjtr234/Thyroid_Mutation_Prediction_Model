@@ -1,7 +1,8 @@
 """
-500개 Bag Attention Score Overlay Visualization (원본 패치 이미지 + 반투명 오버레이)
-- 원본 패치 이미지 위에 attention score를 반투명 색상으로 오버레이
-- 저장된 results.json의 attention scores 사용
+WSI Attention Heatmap Visualization (Heatmap Only)
+- Test set에서 정답 3장 + 오답 3장 선택
+- 가장 성능 좋은 fold 자동 선택
+- JSON 메타데이터에서 좌표 정보 추출 (meta + non-meta)
 """
 
 import os
@@ -12,27 +13,7 @@ import matplotlib
 matplotlib.use('Agg')
 from matplotlib.colors import LinearSegmentedColormap
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont
-
-
-def get_patch_image_path(wsi_name, patch_idx, patch_base_dir):
-    """WSI 이름과 patch index로 실제 patch 이미지 경로 찾기"""
-    # BRAF+ 경로
-    meta_dir = Path(patch_base_dir) / "Train" / "braf_meta" / wsi_name
-    # BRAF- 경로
-    nonmeta_dir = Path(patch_base_dir) / "Train" / "braf_nonmeta" / wsi_name
-    
-    # 두 경로 모두 확인
-    for base_dir in [meta_dir, nonmeta_dir]:
-        if base_dir.exists():
-            # 다양한 naming convention 시도
-            for ext in ['.png', '.jpg', '.jpeg']:
-                for pattern in [f"patch_{patch_idx}{ext}", f"{patch_idx}{ext}"]:
-                    patch_path = base_dir / pattern
-                    if patch_path.exists():
-                        return patch_path
-    
-    return None
+import cv2
 
 
 def create_attention_heatmap_colormap():
@@ -42,61 +23,212 @@ def create_attention_heatmap_colormap():
     return cmap
 
 
-def add_score_overlay(img, score, cmap, min_score, max_score, alpha=0.5):
+def get_best_fold_num(results_json_path, metric='auc'):
+    """가장 성능이 좋은 fold 번호 반환"""
+    with open(results_json_path, 'r') as f:
+        results = json.load(f)
+    
+    best_fold = max(results['folds'], key=lambda x: x['test_metrics'][metric])
+    best_fold_num = best_fold['fold']
+    best_metric_value = best_fold['test_metrics'][metric]
+    
+    print(f"\n{'='*80}")
+    print(f"Best Fold Selection (Based on Test {metric.upper()})")
+    print(f"{'='*80}")
+    print(f"Best Fold: {best_fold_num}")
+    print(f"Test {metric.upper()}: {best_metric_value:.4f}")
+    print(f"{'='*80}\n")
+    
+    return best_fold_num
+
+
+def load_json_metadata(wsi_name, json_meta_dir, json_nonmeta_dir):
     """
-    패치 이미지에 attention score 오버레이 추가
+    JSON 메타데이터 파일에서 좌표 정보 로드 (meta + non-meta 지원)
     
     Args:
-        img: PIL Image (원본 패치)
-        score: attention score
-        cmap: colormap
-        min_score: 최소 score
-        max_score: 최대 score
-        alpha: 오버레이 투명도 (0~1, 낮을수록 원본이 잘 보임)
+        wsi_name: WSI 이름 (예: TC_04_3947)
+        json_meta_dir: meta JSON 디렉토리 경로
+        json_nonmeta_dir: non-meta JSON 디렉토리 경로
+    
+    Returns:
+        metadata: JSON 메타데이터 딕셔너리
     """
-    # Score 정규화
-    norm_score = (score - min_score) / (max_score - min_score + 1e-8)
+    # 1. meta 경로 시도 (coords_selected_ 접두사)
+    json_path_meta = Path(json_meta_dir) / f"coords_selected_{wsi_name}.json"
     
-    # Colormap에서 색상 가져오기
-    color_rgba = cmap(norm_score)
-    color_rgb = tuple(int(c * 255) for c in color_rgba[:3])
+    # 2. non-meta 경로 시도 (접두사 없음)
+    json_path_nonmeta = Path(json_nonmeta_dir) / f"{wsi_name}.json"
     
-    # 색상 오버레이 생성
-    overlay = Image.new('RGB', img.size, color_rgb)
+    # meta 경로 먼저 확인
+    if json_path_meta.exists():
+        with open(json_path_meta, 'r') as f:
+            metadata = json.load(f)
+        print(f"  📁 Loaded from meta: {json_path_meta.name}")
+        return metadata
     
-    # 원본 이미지와 블렌딩 (alpha가 낮을수록 원본이 더 보임)
-    blended = Image.blend(img.convert('RGB'), overlay, alpha=alpha)
+    # non-meta 경로 확인
+    elif json_path_nonmeta.exists():
+        with open(json_path_nonmeta, 'r') as f:
+            metadata = json.load(f)
+        print(f"  📁 Loaded from non-meta: {json_path_nonmeta.name}")
+        return metadata
     
-    return blended
+    # 둘 다 없으면 None
+    else:
+        print(f"  ⚠️ Warning: JSON metadata not found for {wsi_name}")
+        print(f"      Tried: {json_path_meta}")
+        print(f"      Tried: {json_path_nonmeta}")
+        return None
 
 
-def visualize_500_patches_with_overlay(results_json_path, patch_base_dir, save_dir,
-                                       fold_num=1, wsi_names=None,
-                                       thumbnail_size=(96, 96), 
-                                       grid_layout=(25, 20),  # (n_cols, n_rows)
-                                       overlay_alpha=0.4,  # 0.4 = 원본 60% + 오버레이 40%
-                                       dpi=200):
+def extract_coordinates_from_json(metadata):
     """
-    500개 패치의 원본 이미지 위에 attention score를 오버레이로 시각화
+    JSON 메타데이터에서 좌표 정보 추출
+    
+    Args:
+        metadata: JSON 메타데이터 딕셔너리
+    
+    Returns:
+        coords_dict: {patch_idx: (row, col)} 딕셔너리
+        grid_shape: (n_rows, n_cols) 그리드 크기
+    """
+    tiles = metadata['tiles']
+    
+    # 모든 좌표 수집
+    x_coords = []
+    y_coords = []
+    
+    for tile in tiles:
+        x_coords.append(tile['x'])
+        y_coords.append(tile['y'])
+    
+    # 유니크한 좌표 정렬
+    x_coords = sorted(set(x_coords))
+    y_coords = sorted(set(y_coords))
+    
+    n_cols = len(x_coords)
+    n_rows = len(y_coords)
+    grid_shape = (n_rows, n_cols)
+    
+    # 좌표 → 그리드 인덱스 매핑
+    x_to_col = {x: i for i, x in enumerate(x_coords)}
+    y_to_row = {y: i for i, y in enumerate(y_coords)}
+    
+    # 패치 인덱스 → 그리드 좌표 매핑
+    coords_dict = {}
+    for idx, tile in enumerate(tiles):
+        x = tile['x']
+        y = tile['y']
+        row = y_to_row[y]
+        col = x_to_col[x]
+        coords_dict[idx] = (row, col)
+    
+    return coords_dict, grid_shape
+
+
+def create_attention_heatmap(attention_scores, coords_dict, grid_shape, 
+                             patch_indices=None, interpolation='gaussian'):
+    """Attention scores를 spatial heatmap으로 변환"""
+    n_rows, n_cols = grid_shape
+    heatmap = np.zeros((n_rows, n_cols))
+    count_map = np.zeros((n_rows, n_cols))
+    
+    if patch_indices is None:
+        patch_indices = range(len(attention_scores))
+    
+    for patch_idx in patch_indices:
+        if patch_idx >= len(attention_scores):
+            continue
+        
+        score = attention_scores[patch_idx]
+        
+        if patch_idx in coords_dict:
+            row, col = coords_dict[patch_idx]
+            if 0 <= row < n_rows and 0 <= col < n_cols:
+                heatmap[row, col] += score
+                count_map[row, col] += 1
+    
+    mask = count_map > 0
+    heatmap[mask] /= count_map[mask]
+    
+    if interpolation == 'gaussian':
+        from scipy.ndimage import gaussian_filter
+        if np.sum(~mask) > 0:
+            heatmap_filled = cv2.inpaint(
+                (heatmap * 255).astype(np.uint8),
+                (~mask).astype(np.uint8),
+                inpaintRadius=3,
+                flags=cv2.INPAINT_TELEA
+            ) / 255.0
+        else:
+            heatmap_filled = heatmap
+        
+        heatmap = gaussian_filter(heatmap_filled, sigma=1.0)
+    
+    elif interpolation == 'bilinear':
+        from scipy.ndimage import zoom
+        scale = 4
+        heatmap_upscaled = zoom(heatmap, scale, order=1)
+        heatmap = zoom(heatmap_upscaled, 1/scale, order=1)
+    
+    return heatmap
+
+
+def select_correct_incorrect_cases(fold_data, n_correct=3, n_incorrect=3):
+    """정답 케이스와 오답 케이스를 선택"""
+    attention_scores_dict = fold_data.get('test_attention_scores', {})
+    
+    correct_cases = []
+    incorrect_cases = []
+    
+    for wsi_name, wsi_data in attention_scores_dict.items():
+        true_label = wsi_data.get('true_label')
+        pred_label = wsi_data.get('predicted_label')
+        
+        if true_label is None or pred_label is None:
+            continue
+        
+        if true_label == pred_label:
+            correct_cases.append((wsi_name, wsi_data))
+        else:
+            incorrect_cases.append((wsi_name, wsi_data))
+    
+    correct_cases.sort(key=lambda x: abs(x[1].get('pred_prob', 0.5) - 0.5), reverse=True)
+    incorrect_cases.sort(key=lambda x: abs(x[1].get('pred_prob', 0.5) - 0.5), reverse=True)
+    
+    return correct_cases[:n_correct], incorrect_cases[:n_incorrect]
+
+
+def visualize_attention_heatmaps(results_json_path, json_meta_dir, json_nonmeta_dir, save_dir,
+                                fold_num='best', n_correct=3, n_incorrect=3,
+                                interpolation='gaussian', dpi=200):
+    """
+    Test set에서 정답/오답 케이스의 attention heatmap 시각화
     
     Args:
         results_json_path: results.json 파일 경로
-        patch_base_dir: 패치 이미지 base 디렉토리
+        json_meta_dir: meta JSON 메타데이터 디렉토리 경로
+        json_nonmeta_dir: non-meta JSON 메타데이터 디렉토리 경로
         save_dir: 저장 디렉토리
-        fold_num: 시각화할 fold 번호
-        wsi_names: 시각화할 WSI 이름 리스트 (None이면 첫 3개)
-        thumbnail_size: 썸네일 크기 (픽셀)
-        grid_layout: (n_cols, n_rows) 그리드 레이아웃
-        overlay_alpha: 오버레이 투명도 (0~1, 낮을수록 원본이 더 보임)
+        fold_num: 시각화할 fold 번호 ('best' 또는 정수)
+        n_correct: 정답 케이스 개수
+        n_incorrect: 오답 케이스 개수
+        interpolation: 'none', 'bilinear', 'gaussian'
         dpi: 저장 이미지 해상도
     """
-    # results.json 로드
     print(f"\n{'='*80}")
-    print(f"Loading attention scores from: {results_json_path}")
+    print(f"WSI Attention Heatmap Visualization")
     print(f"{'='*80}")
     
+    # results.json 로드
+    print(f"Loading: {results_json_path}")
     with open(results_json_path, 'r') as f:
         results = json.load(f)
+    
+    # 최고 성능 fold 자동 선택
+    if fold_num == 'best':
+        fold_num = get_best_fold_num(results_json_path, metric='auc')
     
     # 해당 fold 찾기
     fold_data = None
@@ -111,157 +243,125 @@ def visualize_500_patches_with_overlay(results_json_path, patch_base_dir, save_d
     if 'test_attention_scores' not in fold_data:
         raise ValueError(f"No attention scores found in fold {fold_num}")
     
-    attention_scores_dict = fold_data['test_attention_scores']
+    # 정답/오답 케이스 선택
+    correct_cases, incorrect_cases = select_correct_incorrect_cases(
+        fold_data, n_correct, n_incorrect
+    )
     
-    # 저장 디렉토리 생성
-    save_dir = Path(save_dir) / f"fold_{fold_num}_500patches_overlay"
+    print(f"\n📊 Selected Cases (Fold {fold_num}):")
+    print(f"  Correct predictions: {len(correct_cases)}/{n_correct}")
+    print(f"  Incorrect predictions: {len(incorrect_cases)}/{n_incorrect}")
+    
+    # 저장 디렉토리
+    save_dir = Path(save_dir) / f"fold_{fold_num}_attention_heatmaps"
     save_dir.mkdir(parents=True, exist_ok=True)
     
     cmap = create_attention_heatmap_colormap()
-    n_cols, n_rows = grid_layout
+    
+    # 정답 케이스 시각화
+    print(f"\n{'─'*80}")
+    print(f"Processing Correct Predictions ({len(correct_cases)})")
+    print(f"{'─'*80}")
+    
+    for idx, (wsi_name, wsi_data) in enumerate(correct_cases, 1):
+        visualize_single_heatmap(
+            wsi_name, wsi_data, json_meta_dir, json_nonmeta_dir, save_dir, cmap,
+            case_type='correct', case_idx=idx, interpolation=interpolation, dpi=dpi
+        )
+    
+    # 오답 케이스 시각화
+    print(f"\n{'─'*80}")
+    print(f"Processing Incorrect Predictions ({len(incorrect_cases)})")
+    print(f"{'─'*80}")
+    
+    for idx, (wsi_name, wsi_data) in enumerate(incorrect_cases, 1):
+        visualize_single_heatmap(
+            wsi_name, wsi_data, json_meta_dir, json_nonmeta_dir, save_dir, cmap,
+            case_type='incorrect', case_idx=idx, interpolation=interpolation, dpi=dpi
+        )
     
     print(f"\n{'='*80}")
-    print(f"Generating 500-Patch Attention Overlays - Fold {fold_num}")
-    print(f"Grid Layout: {n_cols} cols × {n_rows} rows = {n_cols * n_rows} patches")
-    print(f"Thumbnail Size: {thumbnail_size}")
-    print(f"Overlay Alpha: {overlay_alpha} (원본 {(1-overlay_alpha)*100:.0f}% + 오버레이 {overlay_alpha*100:.0f}%)")
-    print(f"{'='*80}")
-    print(f"Total WSIs in JSON: {len(attention_scores_dict)}")
-    
-    # wsi_names가 None이면 첫 3개만 선택
-    if wsi_names is None:
-        wsi_names = list(attention_scores_dict.keys())[:3]
-        print(f"Processing first 3 WSIs: {wsi_names}")
-    else:
-        print(f"Processing {len(wsi_names)} specified WSIs")
-    
-    processed_count = 0
-    for wsi_name, wsi_data in attention_scores_dict.items():
-        # 특정 WSI만 처리
-        if wsi_name not in wsi_names:
-            continue
-        
-        processed_count += 1
-        
-        # Attention scores와 메타데이터 추출
-        attention_scores = np.array(wsi_data['scores'])
-        n_patches = wsi_data['n_patches']
-        true_label = wsi_data.get('true_label', None)
-        pred_label = wsi_data.get('predicted_label', None)
-        pred_prob = wsi_data.get('pred_prob', None)
-        
-        print(f"\n[{processed_count}/3] {wsi_name}")
-        if true_label is not None:
-            print(f"  True: {'BRAF+' if true_label==1 else 'BRAF-'}", end="")
-        if pred_label is not None and pred_prob is not None:
-            print(f" | Pred: {'BRAF+' if pred_label==1 else 'BRAF-'} ({pred_prob:.3f})")
-        print(f"  Patches: {n_patches}")
-        print(f"  Score Range: [{attention_scores.min():.6f}, {attention_scores.max():.6f}]")
-        print(f"  Score Mean: {attention_scores.mean():.6f} ± {attention_scores.std():.6f}")
-        
-        # Figure 크기 계산
-        fig_width = n_cols * (thumbnail_size[0] / 100) * 1.1
-        fig_height = n_rows * (thumbnail_size[1] / 100) * 1.15
-        
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=(fig_width, fig_height))
-        
-        # axes를 2D 배열로 변환
-        if n_rows == 1 and n_cols == 1:
-            axes = np.array([[axes]])
-        elif n_rows == 1:
-            axes = axes.reshape(1, -1)
-        elif n_cols == 1:
-            axes = axes.reshape(-1, 1)
-        
-        min_score = attention_scores.min()
-        max_score = attention_scores.max()
-        
-        # 각 패치 시각화
-        patches_found = 0
-        patches_missing = 0
-        
-        for patch_idx in range(min(n_patches, n_cols * n_rows)):
-            row = patch_idx // n_cols
-            col = patch_idx % n_cols
-            ax = axes[row, col]
-            
-            score = attention_scores[patch_idx]
-            
-            # 패치 이미지 로드
-            patch_path = get_patch_image_path(wsi_name, patch_idx, patch_base_dir)
-            
-            if patch_path and patch_path.exists():
-                # 원본 이미지 로드
-                img = Image.open(patch_path)
-                img = img.resize(thumbnail_size, Image.Resampling.LANCZOS)
-                
-                # Attention score 오버레이 추가
-                img_with_overlay = add_score_overlay(
-                    img, score, cmap, min_score, max_score, alpha=overlay_alpha
-                )
-                
-                ax.imshow(img_with_overlay)
-                patches_found += 1
-            else:
-                # 이미지가 없으면 colormap 색상으로만 채움
-                norm_score = (score - min_score) / (max_score - min_score + 1e-8)
-                color_rgba = cmap(norm_score)
-                color_rgb = color_rgba[:3]
-                
-                ax.imshow(np.ones((thumbnail_size[1], thumbnail_size[0], 3)) * color_rgb)
-                patches_missing += 1
-            
-            ax.axis('off')
-        
-        # 빈 subplot 제거
-        for i in range(n_patches, n_rows * n_cols):
-            row = i // n_cols
-            col = i % n_cols
-            if row < n_rows and col < n_cols:
-                fig.delaxes(axes[row, col])
-        
-        # 전체 제목
-        title_parts = [f'{wsi_name} - {n_patches} Patches']
-        if true_label is not None and pred_label is not None:
-            title_parts.append(
-                f'True: {"BRAF+" if true_label==1 else "BRAF-"} | '
-                f'Pred: {"BRAF+" if pred_label==1 else "BRAF-"} ({pred_prob:.3f})'
-            )
-        
-        fig.suptitle('\n'.join(title_parts), fontsize=14, fontweight='bold', y=0.995)
-        
-        # Colorbar 추가
-        sm = plt.cm.ScalarMappable(cmap=cmap, 
-                                  norm=plt.Normalize(vmin=min_score, vmax=max_score))
-        sm.set_array([])
-        
-        cbar_ax = fig.add_axes([0.15, 0.005, 0.7, 0.01])
-        cbar = fig.colorbar(sm, cax=cbar_ax, orientation='horizontal')
-        cbar.set_label(f'Attention Score: {min_score:.6f} → {max_score:.6f}', 
-                      fontsize=9, fontweight='bold')
-        cbar.ax.tick_params(labelsize=8)
-        
-        plt.subplots_adjust(left=0.01, right=0.99, top=0.975, bottom=0.025, 
-                          wspace=0.02, hspace=0.02)
-        
-        # 저장
-        save_path = save_dir / f"{wsi_name}_500patches_overlay.png"
-        plt.savefig(save_path, dpi=dpi, bbox_inches='tight')
-        plt.close()
-        
-        print(f"  ✓ Saved: {save_path.name}")
-        print(f"    Found: {patches_found}/{n_patches} patches", end="")
-        if patches_missing > 0:
-            print(f" | Missing: {patches_missing}")
-        else:
-            print()
-    
-    print(f"\n{'='*80}")
-    print(f"[✓] All 500-patch attention overlays saved to:")
+    print(f"[✓] All attention heatmaps saved to:")
     print(f"    {save_dir}")
     print(f"{'='*80}\n")
     
     return save_dir
+
+
+def visualize_single_heatmap(wsi_name, wsi_data, json_meta_dir, json_nonmeta_dir, save_dir, cmap,
+                             case_type='correct', case_idx=1, 
+                             interpolation='gaussian', dpi=200):
+    """단일 WSI의 attention heatmap 시각화"""
+    
+    attention_scores = np.array(wsi_data['scores'])
+    n_patches = wsi_data['n_patches']
+    true_label = wsi_data.get('true_label', None)
+    pred_label = wsi_data.get('predicted_label', None)
+    pred_prob = wsi_data.get('pred_prob', None)
+    
+    print(f"\n[{case_idx}] {wsi_name}")
+    print(f"  Type: {'✓ Correct' if case_type == 'correct' else '✗ Incorrect'}")
+    if true_label is not None:
+        print(f"  True Label: {'BRAF+' if true_label==1 else 'BRAF-'}")
+    if pred_label is not None and pred_prob is not None:
+        print(f"  Predicted: {'BRAF+' if pred_label==1 else 'BRAF-'} (prob={pred_prob:.3f})")
+    print(f"  Patches: {n_patches}")
+    print(f"  Score Range: [{attention_scores.min():.6f}, {attention_scores.max():.6f}]")
+    
+    # JSON 메타데이터 로드 (meta + non-meta 자동 탐색)
+    metadata = load_json_metadata(wsi_name, json_meta_dir, json_nonmeta_dir)
+    
+    if metadata is None:
+        print(f"  ⚠️ Skipping: Cannot load JSON metadata")
+        return
+    
+    # 좌표 정보 추출
+    coords_dict, grid_shape = extract_coordinates_from_json(metadata)
+    
+    print(f"  Grid Shape: {grid_shape[0]} rows × {grid_shape[1]} cols")
+    print(f"  Total tiles in JSON: {len(metadata['tiles'])}")
+    
+    # Attention heatmap 생성
+    heatmap = create_attention_heatmap(
+        attention_scores, coords_dict, grid_shape, 
+        patch_indices=range(n_patches),
+        interpolation=interpolation
+    )
+    
+    # 시각화
+    fig, ax = plt.subplots(1, 1, figsize=(12, 10))
+    
+    im = ax.imshow(heatmap, cmap=cmap, aspect='auto', interpolation='bilinear')
+    
+    title_parts = [f'{wsi_name}']
+    if case_type == 'correct':
+        title_parts.append('✓ Correct Prediction')
+    else:
+        title_parts.append('✗ Incorrect Prediction')
+    
+    if true_label is not None and pred_label is not None:
+        title_parts.append(
+            f'True: {"BRAF+" if true_label==1 else "BRAF-"} | '
+            f'Pred: {"BRAF+" if pred_label==1 else "BRAF-"} ({pred_prob:.3f})'
+        )
+    
+    ax.set_title('\n'.join(title_parts), fontsize=14, fontweight='bold', pad=20)
+    
+    cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    cbar.set_label(f'Attention Score\n[{attention_scores.min():.4f}, {attention_scores.max():.4f}]',
+                   fontsize=11, fontweight='bold')
+    cbar.ax.tick_params(labelsize=9)
+    
+    ax.set_xlabel('Column Index', fontsize=11)
+    ax.set_ylabel('Row Index', fontsize=11)
+    ax.grid(False)
+    
+    filename = f"{case_type}_{case_idx:02d}_{wsi_name}_heatmap.png"
+    save_path = save_dir / filename
+    plt.savefig(save_path, dpi=dpi, bbox_inches='tight')
+    plt.close()
+    
+    print(f"  ✓ Saved: {filename}")
 
 
 # =========================
@@ -269,38 +369,29 @@ def visualize_500_patches_with_overlay(results_json_path, patch_base_dir, save_d
 # =========================
 if __name__ == "__main__":
     """
-    사용 예시: 원본 패치 이미지 + attention score 오버레이
+    사용 예시: meta + non-meta JSON 메타데이터 사용
     """
     
     # 경로 설정
-    results_json_path = "/home/mts/ssd_16tb/member/jks/Thyroid_Mutation_model_v2/outputs/Thyroid_prediction_model_v0.2.0/results.json"
-    patch_base_dir = "/data/143/member/kwk/dl/thyroid/image/slide-v1-240412/patch"
-    save_dir = "./attention_visualizations"
+    results_json_path = "/home/mts/ssd_16tb/member/jks/Thyroid_Mutation_model_v2/outputs/Thyroid_prediction_model_v0.5.0/results.json"
     
-    # 기본 설정 (첫 3개 WSI)
-    visualize_500_patches_with_overlay(
+    # meta JSON 경로
+    json_meta_dir = "/data/143/member/jks/Thyroid_Mutation_dataset/embeddings/final_meta_dataset_v0.1.0/json_metadata"
+    
+    # non-meta JSON 경로
+    json_nonmeta_dir = "/data/143/member/jks/Thyroid_Mutation_dataset/embeddings/final_nonmeta_dataset_v0.1.0/json"
+    
+    save_dir = "./attention_heatmaps"
+    
+    # 최고 성능 fold 자동 선택
+    visualize_attention_heatmaps(
         results_json_path=results_json_path,
-        patch_base_dir=patch_base_dir,
+        json_meta_dir=json_meta_dir,
+        json_nonmeta_dir=json_nonmeta_dir,
         save_dir=save_dir,
-        fold_num=1,
-        wsi_names=None,  # None이면 첫 3개 자동 선택
-        thumbnail_size=(96, 96),  # 각 패치 썸네일 크기
-        grid_layout=(25, 20),  # 25 cols × 20 rows = 500
-        overlay_alpha=0.4,  # 원본 60% + 오버레이 40%
+        fold_num='best',
+        n_correct=3,
+        n_incorrect=3,
+        interpolation='gaussian',
         dpi=200
     )
-    
-    # 더 강한 오버레이 효과 (원본이 덜 보임)
-    """
-    visualize_500_patches_with_overlay(
-        results_json_path=results_json_path,
-        patch_base_dir=patch_base_dir,
-        save_dir=save_dir,
-        fold_num=1,
-        wsi_names=['TC_04_7900'],
-        thumbnail_size=(128, 128),  # 더 큰 썸네일
-        grid_layout=(25, 20),
-        overlay_alpha=0.6,  # 원본 40% + 오버레이 60%
-        dpi=300
-    )
-    """

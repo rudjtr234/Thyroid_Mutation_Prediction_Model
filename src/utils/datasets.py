@@ -24,12 +24,19 @@ class ThyroidWSIDataset(Dataset):
         self.use_variance = use_variance
 
         for filepath in wsi_files:
-            # meta 또는 meta_test_final 인식
-            if '/meta/' in filepath or '\\meta\\' in filepath or \
-               '/meta_test_final/' in filepath or '\\meta_test_final\\' in filepath:
+            # 경로에서 label 추론 (더 구체적인 패턴 매칭)
+            if 'final_meta_dataset' in filepath:
                 label = 1  # BRAF+
-            else:
+            elif 'final_nonmeta_dataset' in filepath:
                 label = 0  # BRAF-
+            elif 'meta_test_final' in filepath or '/meta/' in filepath or '\\meta\\' in filepath:
+                label = 1  # BRAF+
+            elif 'nonmeta_test_final' in filepath or '/nonmeta/' in filepath or '\\nonmeta\\' in filepath:
+                label = 0  # BRAF-
+            else:
+                # 파일명으로 추론 불가능한 경우 경고
+                print(f"Warning: Cannot infer label from path: {filepath}")
+                label = 0
 
             self.wsi_list.append({
                 'filepath': filepath,
@@ -68,10 +75,10 @@ class ThyroidWSIDataset(Dataset):
         return features, label, wsi['filename']
 
 
-def load_json_splits(json_path, data_root):
+def load_json_splits(json_path):
     """
     JSON 파일에서 미리 정의된 K-Fold split 로드
-    - meta_test_final / nonmeta_test_final 지원
+    - JSON에 전체 경로가 저장되어 있으므로 그대로 사용
     """
     with open(json_path, 'r') as f:
         split_data = json.load(f)
@@ -81,77 +88,28 @@ def load_json_splits(json_path, data_root):
     for fold_info in split_data['folds']:
         fold_idx = fold_info['fold']
 
-        # Train WSI 파일 경로 생성
-        train_files = []
-        for filename in fold_info['train_wsis']:
-            # meta / meta_test_final 또는 nonmeta / nonmeta_test_final 폴더에서 찾기
-            meta_paths = [
-                os.path.join(data_root, 'meta', filename),
-                os.path.join(data_root, 'meta_test_final', filename)
-            ]
-            nonmeta_paths = [
-                os.path.join(data_root, 'nonmeta', filename),
-                os.path.join(data_root, 'nonmeta_test_final', filename)
-            ]
+        # JSON에 전체 경로가 저장되어 있으므로 그대로 사용
+        train_files = fold_info['train_wsis']
+        val_files = fold_info['val_wsis']
+        test_files = fold_info['test_wsis']
 
-            found = False
-            for path in meta_paths + nonmeta_paths:
-                if os.path.exists(path):
-                    train_files.append(path)
-                    found = True
-                    break
-            
-            if not found:
-                print(f"Warning: {filename} not found in train")
+        # 파일 존재 여부 확인
+        train_files_exist = [f for f in train_files if os.path.exists(f)]
+        val_files_exist = [f for f in val_files if os.path.exists(f)]
+        test_files_exist = [f for f in test_files if os.path.exists(f)]
 
-        # Val WSI 파일 경로 생성
-        val_files = []
-        for filename in fold_info['val_wsis']:
-            meta_paths = [
-                os.path.join(data_root, 'meta', filename),
-                os.path.join(data_root, 'meta_test_final', filename)
-            ]
-            nonmeta_paths = [
-                os.path.join(data_root, 'nonmeta', filename),
-                os.path.join(data_root, 'nonmeta_test_final', filename)
-            ]
-
-            found = False
-            for path in meta_paths + nonmeta_paths:
-                if os.path.exists(path):
-                    val_files.append(path)
-                    found = True
-                    break
-            
-            if not found:
-                print(f"Warning: {filename} not found in val")
-
-        # Test WSI 파일 경로 생성
-        test_files = []
-        for filename in fold_info['test_wsis']:
-            meta_paths = [
-                os.path.join(data_root, 'meta', filename),
-                os.path.join(data_root, 'meta_test_final', filename)
-            ]
-            nonmeta_paths = [
-                os.path.join(data_root, 'nonmeta', filename),
-                os.path.join(data_root, 'nonmeta_test_final', filename)
-            ]
-
-            found = False
-            for path in meta_paths + nonmeta_paths:
-                if os.path.exists(path):
-                    test_files.append(path)
-                    found = True
-                    break
-            
-            if not found:
-                print(f"Warning: {filename} not found in test")
+        # 누락된 파일 경고
+        if len(train_files_exist) != len(train_files):
+            print(f"Warning: Fold {fold_idx} - {len(train_files) - len(train_files_exist)} train files not found")
+        if len(val_files_exist) != len(val_files):
+            print(f"Warning: Fold {fold_idx} - {len(val_files) - len(val_files_exist)} val files not found")
+        if len(test_files_exist) != len(test_files):
+            print(f"Warning: Fold {fold_idx} - {len(test_files) - len(test_files_exist)} test files not found")
 
         # Dataset 생성
-        train_dataset = ThyroidWSIDataset(train_files, bag_size=2000, use_variance=False)
-        val_dataset = ThyroidWSIDataset(val_files, bag_size=2000, use_variance=False)
-        test_dataset = ThyroidWSIDataset(test_files, bag_size=2000, use_variance=False)
+        train_dataset = ThyroidWSIDataset(train_files_exist, bag_size=2000, use_variance=False)
+        val_dataset = ThyroidWSIDataset(val_files_exist, bag_size=2000, use_variance=False)
+        test_dataset = ThyroidWSIDataset(test_files_exist, bag_size=2000, use_variance=False)
 
         fold_datasets.append({
             'fold': fold_idx,
@@ -161,9 +119,9 @@ def load_json_splits(json_path, data_root):
         })
 
         print(f"\nFold {fold_idx}:")
-        print(f"  Train: {len(train_files)} WSIs")
-        print(f"  Val: {len(val_files)} WSIs")
-        print(f"  Test: {len(test_files)} WSIs")
+        print(f"  Train: {len(train_files_exist)} WSIs")
+        print(f"  Val: {len(val_files_exist)} WSIs")
+        print(f"  Test: {len(test_files_exist)} WSIs")
 
     return fold_datasets
 
@@ -183,10 +141,9 @@ def set_seed(seed=42):
 if __name__ == "__main__":
     set_seed(42)
 
-    # JSON 기반 K-Fold 로드
+    # JSON 기반 K-Fold 로드 (data_root 파라미터 제거)
     fold_datasets = load_json_splits(
-        json_path="/home/mts/ssd_16tb/member/jks/Thyroid_Mutation_model/outputs/Thyroid_prediction_model_v0.1.0/cv_splits/cv_splits_k5_seed42.json",
-        data_root="data"  # meta/, nonmeta/ 폴더가 있는 경로
+        json_path="/home/mts/ssd_16tb/member/jks/Thyroid_Mutation_model/outputs/Thyroid_prediction_model_v0.1.0/cv_splits/cv_splits_balanced_k5_seed42_v0.2.1.json"
     )
 
     # Fold 1 확인

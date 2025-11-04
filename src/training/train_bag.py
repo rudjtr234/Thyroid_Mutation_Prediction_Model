@@ -1,12 +1,10 @@
 """
-active_code
-
-no patch visualization version
+active_code - with attention scores extraction
 
 CUDA_VISIBLE_DEVICES=4 python train_bag.py \
   --data_root /data/143/member/jks/Thyroid_Mutation_dataset/embeddings \
-  --model_save_dir /home/mts/ssd_16tb/member/jks/Thyroid_Mutation_model_v2/outputs/Thyroid_prediction_model_v0.2.0 \
-  --cv_split_file /home/mts/ssd_16tb/member/jks/Thyroid_Mutation_model_v2/src/utils/cv_splits/cv_splits_k5_seed42_.json_v0.2.0 \
+  --model_save_dir /home/mts/ssd_16tb/member/jks/Thyroid_Mutation_model_v2/outputs/Thyroid_prediction_model_v0.5.0 \
+  --cv_split_file /home/mts/ssd_16tb/member/jks/Thyroid_Mutation_model_v2/src/utils/cv_splits/cv_splits/cv_splits_balanced_k5_seed42_v0.3.0.json \
   --epochs 100 \
   --lr 1e-5 \
   --bag_size 500 \
@@ -216,10 +214,6 @@ def plot_training_curves(fold_results, save_dir):
         # Loss
         axes[idx, 0].plot(epochs, history['train_loss'], 'b-', label='Train Loss', linewidth=2)
         axes[idx, 0].plot(epochs, history['val_loss'], 'r-', label='Val Loss', linewidth=2)
-        # Best epoch에 test loss 표시
-        if 'test_loss' in fold_result['test_metrics']:
-            axes[idx, 0].scatter([best_epoch], [fold_result['test_metrics']['test_loss']], 
-                               color='green', s=100, marker='*', label='Test Loss', zorder=5)
         axes[idx, 0].axvline(x=best_epoch, color='gray', linestyle='--', alpha=0.5, label=f'Best Epoch ({best_epoch})')
         axes[idx, 0].set_xlabel('Epoch', fontsize=10)
         axes[idx, 0].set_ylabel('Loss', fontsize=10)
@@ -230,7 +224,6 @@ def plot_training_curves(fold_results, save_dir):
         # AUC
         axes[idx, 1].plot(epochs, history['train_auc'], 'b-', label='Train AUC', linewidth=2)
         axes[idx, 1].plot(epochs, history['val_auc'], 'r-', label='Val AUC', linewidth=2)
-        # Best epoch에 test AUC 표시
         test_auc = fold_result['test_metrics']['auc']
         axes[idx, 1].scatter([best_epoch], [test_auc], 
                            color='green', s=100, marker='*', label=f'Test AUC ({test_auc:.3f})', zorder=5)
@@ -245,7 +238,6 @@ def plot_training_curves(fold_results, save_dir):
         # Accuracy
         axes[idx, 2].plot(epochs, history['train_acc'], 'b-', label='Train Acc', linewidth=2)
         axes[idx, 2].plot(epochs, history['val_acc'], 'r-', label='Val Acc', linewidth=2)
-        # Best epoch에 test accuracy 표시
         test_acc = fold_result['test_metrics']['accuracy']
         axes[idx, 2].scatter([best_epoch], [test_acc], 
                            color='green', s=100, marker='*', label=f'Test Acc ({test_acc:.3f})', zorder=5)
@@ -424,20 +416,77 @@ def run_one_epoch(model, dataloader, device, optimizer=None, train=False):
     return metrics
 
 
-def evaluate_model(model, dataloader, device):
+# ✅ 수정된 evaluate_model 함수 - attention scores도 반환
+def evaluate_model_with_attention(model, dataloader, device):
+    """
+    모델 평가 + attention scores 추출
+    """
     model.eval()
-    all_probs, all_labels, all_preds = [], [], []
+    all_probs, all_labels, all_preds, all_filenames = [], [], [], []
+    attention_scores_dict = {}
+    
     with torch.no_grad():
         for features, label, filename in dataloader:
             features = features.to(device)
             label = label.to(device)
-            results_dict, _ = model(h=features, loss_fn=None, label=None)
+            
+            # ✅ 수정: return_attention=True 추가!
+            results_dict, attention_weights = model(
+                h=features, 
+                loss_fn=None, 
+                label=None,
+                return_attention=True  # ← 이게 중요!
+            )
+            
             logits = results_dict['logits']
             probs = torch.softmax(logits, dim=1)[:, 1]
             preds = torch.argmax(logits, dim=1)
+            
             all_probs.extend(probs.cpu().numpy())
             all_preds.extend(preds.cpu().numpy())
             all_labels.extend(label.cpu().numpy())
+            all_filenames.extend(filename)
+            
+            # Attention scores 저장
+            wsi_name = filename[0] if isinstance(filename, (list, tuple)) else filename
+            wsi_name = wsi_name.replace('.pt', '')
+            
+            # None 체크
+            if attention_weights is None:
+                print(f"  ⚠️ Warning: attention_weights is None for {wsi_name}")
+                continue
+            
+            if isinstance(attention_weights, dict):
+                if 'A' not in attention_weights:
+                    print(f"  ⚠️ Warning: 'A' key not found for {wsi_name}")
+                    print(f"      Available keys: {list(attention_weights.keys())}")
+                    continue
+                
+                if attention_weights['A'] is None:
+                    print(f"  ⚠️ Warning: attention_weights['A'] is None for {wsi_name}")
+                    continue
+                
+                attn_scores = attention_weights['A'].cpu().numpy().flatten()
+                
+            elif isinstance(attention_weights, torch.Tensor):
+                attn_scores = attention_weights.cpu().numpy().flatten()
+            else:
+                print(f"  ⚠️ Warning: Unknown attention_weights type: {type(attention_weights)}")
+                continue
+            
+            attention_scores_dict[wsi_name] = {
+                'scores': attn_scores.tolist(),
+                'n_patches': len(attn_scores),
+                'true_label': int(label.cpu().numpy()[0]),
+                'predicted_label': int(preds[-1]),
+                'pred_prob': float(probs[-1].cpu().numpy())
+            }
+    
+    return all_probs, all_labels, all_preds, all_filenames, attention_scores_dict
+
+# 기존 evaluate_model도 유지 (하위 호환성)
+def evaluate_model(model, dataloader, device):
+    all_probs, all_labels, all_preds, _, _ = evaluate_model_with_attention(model, dataloader, device)
     return all_probs, all_labels, all_preds
 
 
@@ -601,8 +650,9 @@ def check_label_distribution(cv_splits, data_root, bag_size):
     
     print("\n" + "="*80 + "\n")
 
+
 # =========================
-# Run K-Fold CV
+# Run K-Fold CV (✅ 수정됨)
 # =========================
 def run_k_fold_cv(cv_splits, args, device):
     all_fold_results = []
@@ -622,9 +672,30 @@ def run_k_fold_cv(cv_splits, args, device):
 
         print(f"Train size: {len(train_dataset)}, Val size: {len(val_dataset)}, Test size: {len(test_dataset)}")
 
-        train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True)
-        val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False)
-        test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
+        train_loader = DataLoader(
+            train_dataset, 
+            batch_size=1, 
+            shuffle=True,
+            num_workers=8,
+            pin_memory=True,
+            persistent_workers=True
+        )
+        val_loader = DataLoader(
+            val_dataset, 
+            batch_size=1, 
+            shuffle=False,
+            num_workers=4,
+            pin_memory=True,
+            persistent_workers=True
+        )
+        test_loader = DataLoader(
+            test_dataset, 
+            batch_size=1, 
+            shuffle=False,
+            num_workers=4,
+            pin_memory=True,
+            persistent_workers=True
+        )
 
         model = ABMILModel(config).to(device)
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
@@ -678,12 +749,15 @@ def run_k_fold_cv(cv_splits, args, device):
                 early_stopping.restore_best(model)
                 break
 
-        # Test evaluation
+        # ✅ Test evaluation with attention scores
         print(f"\n{'─'*80}")
         print(f"Testing Fold {fold_data['fold']} on best model (Epoch {best_epoch})")
         print(f"{'─'*80}")
         
-        test_probs, test_labels, test_preds = evaluate_model(model, test_loader, device)
+        # Attention scores 포함하여 평가
+        test_probs, test_labels, test_preds, test_filenames, attention_scores_dict = \
+            evaluate_model_with_attention(model, test_loader, device)
+        
         test_metrics = compute_metrics_with_confusion(test_labels, test_preds, test_probs)
         
         # ROC curve와 Precision-Recall curve 데이터 계산
@@ -701,10 +775,12 @@ def run_k_fold_cv(cv_splits, args, device):
         print(f"\n  Confusion Matrix:")
         print(f"    TP: {test_metrics['tp']:3d}  |  FN: {test_metrics['fn']:3d}")
         print(f"    FP: {test_metrics['fp']:3d}  |  TN: {test_metrics['tn']:3d}")
+        print(f"\n  Attention Scores: Extracted for {len(attention_scores_dict)} WSIs")
 
         # Fold별 표 출력
         print_fold_table(fold_data['fold'], best_train_metrics, best_val_metrics, test_metrics)
 
+        # ✅ fold_result에 attention_scores_dict 추가
         fold_result = {
             "fold": fold_data['fold'],
             "train_size": len(train_dataset),
@@ -718,7 +794,8 @@ def run_k_fold_cv(cv_splits, args, device):
             "test_fpr": fpr.tolist(),
             "test_tpr": tpr.tolist(),
             "test_precision": precision.tolist(),
-            "test_recall": recall.tolist()
+            "test_recall": recall.tolist(),
+            "test_attention_scores": attention_scores_dict  # ✅ 추가!
         }
 
         all_fold_results.append(fold_result)
@@ -831,7 +908,6 @@ def main():
     parser.add_argument('--debug', action='store_true')
     args = parser.parse_args()
     
-
     set_seed(args.seed)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -874,7 +950,7 @@ def main():
     # ==========================================
     results = {
         "summary_statistics": summary_stats,
-        "folds": fold_results,
+        "folds": fold_results,  # ✅ 이제 test_attention_scores 포함!
     }
     
     # Final aggregated results
@@ -895,6 +971,7 @@ def main():
     with open(results_path, "w") as f:
         json.dump(convert_numpy(results), f, indent=2)
     print(f"\n[✓] Results saved: {results_path}")
+    print(f"    ✅ Attention scores included for all test WSIs")
 
     if args.save_model and model_paths:
         print(f"[✓] Saved {len(model_paths)} model checkpoints")
