@@ -117,6 +117,6 @@ WSI(Whole Slide Image) 임베딩 파이프라인과,
 | **5000**      | 0.816 ± 0.074             | 0.896 ± 0.047         | 0.840 ± 0.057     | 0.792 ± 0.155     | 0.819 ± 0.115       | 0.833 ± 0.047 | 0.824 ± 0.063 |
 
 
-example attention map
+## example attention map
 
-![ABMIL Attention Map](./image/example_attention_heatmap.png)
+![Example Attention Heatmap](./image/example_attention_heatmap.png)
