@@ -81,6 +81,7 @@ WSI(Whole Slide Image) 임베딩 파이프라인과,
 
 ### 🔹 ABMIL 모델 구조
 
+<pre><code>
 WSI
  └── Tile Embeddings (N × 1536)
         ↓
@@ -95,7 +96,7 @@ WSI
      Classifier (FC → Softmax)
         ↓
      P(BRAF+) or P(BRAF−)
-
+</code></pre>
 
 - **입력 (Input):** UNI2-h로부터 추출된 타일 임베딩 (N × 1536)  
 - **Feature Encoder:** FC Layer를 통해 차원 축소 (1536 → 512)  
