@@ -1,0 +1,123 @@
+# -*- coding: utf-8 -*-
+"""
+Main training script with MLflow integration.
+
+This script orchestrates the training pipeline and automatic MLflow logging.
+
+Workflow:
+    1. Parse command-line arguments
+    2. Run 5-fold cross-validation training (train_bag.py)
+    3. Automatically upload results to MLflow server (mlflow_utils.py)
+
+Entry Point:
+    This is the main entry point for training with automatic MLflow integration.
+"""
+
+import os
+import sys
+
+# ⚠️ CRITICAL: GPU 설정을 가장 먼저 해야 함 (torch import 전에)
+if 'CUDA_VISIBLE_DEVICES' not in os.environ:
+    os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+    print(f"⚠️  [main.py] CUDA_VISIBLE_DEVICES not set, forcing GPU 2")
+else:
+    print(f"✓ [main.py] CUDA_VISIBLE_DEVICES: {os.environ['CUDA_VISIBLE_DEVICES']}")
+
+import argparse
+from pathlib import Path
+
+# =========================
+# Path Configuration
+# =========================
+# Add src directory to Python path for module imports
+current_dir = os.path.dirname(os.path.abspath(__file__))
+src_dir = os.path.dirname(current_dir)
+sys.path.insert(0, src_dir)
+
+from train_bag import run_training
+from mlflow_utils import upload_to_mlflow
+
+
+def main():
+    """
+    Main entry point for training with MLflow integration.
+
+    Steps:
+    1. Parse arguments
+    2. Run training (5-fold CV)
+    3. Automatically upload results to MLflow if --save_model is enabled
+    """
+
+    # Parse arguments
+    parser = argparse.ArgumentParser(description='Train ABMIL model with 5-fold CV and MLflow logging')
+    parser.add_argument('--data_root', type=str, required=True,
+                        help='Root directory of embedding data')
+    parser.add_argument('--model_save_dir', type=str, required=True,
+                        help='Directory to save model checkpoints and results')
+    parser.add_argument('--cv_split_file', type=str, required=True,
+                        help='Path to CV split JSON file')
+    parser.add_argument('--epochs', type=int, default=100,
+                        help='Number of training epochs (default: 100)')
+    parser.add_argument('--lr', type=float, default=1e-4,
+                        help='Learning rate (default: 1e-4)')
+    parser.add_argument('--bag_size', type=int, default=2000,
+                        help='Bag size for MIL (default: 2000)')
+    parser.add_argument('--seed', type=int, default=42,
+                        help='Random seed (default: 42)')
+    parser.add_argument('--save_model', action='store_true',
+                        help='Save model checkpoints')
+    parser.add_argument('--save_best_only', action='store_true',
+                        help='Save only best model per fold')
+    parser.add_argument('--debug', action='store_true',
+                        help='Enable debug mode')
+    parser.add_argument('--generate_plots', action='store_true',
+                        help='Generate visualization plots')
+    parser.add_argument('--test_fold', type=int, default=None,
+                        help='Test only specific fold (default: None, test all folds)')
+
+    args = parser.parse_args()
+
+    # Run training
+    print(f"{'='*80}")
+    print(f"Starting Training Pipeline")
+    print(f"{'='*80}\n")
+
+    training_results = run_training(args)
+
+    # Check if MLflow upload should be performed
+    if training_results and training_results['model_checkpoint_path']:
+        if args.save_model:
+            print(f"\n{'='*80}")
+            print(f"Uploading to MLflow")
+            print(f"{'='*80}\n")
+
+            try:
+                upload_to_mlflow(
+                    model_save_dir=training_results['model_save_dir'],
+                    json_path=training_results['json_path'],
+                    model_checkpoint_path=training_results['model_checkpoint_path'],
+                    lr=args.lr,
+                    epochs=args.epochs,
+                    bag_size=args.bag_size,
+                    seed=args.seed
+                )
+                print(f"\n[✓] MLflow upload completed!")
+
+            except Exception as e:
+                print(f"\n[!] MLflow upload failed: {e}")
+                print(f"    You can manually upload using:")
+                print(f"    python outputs/mlflow/mlflow_upload.py")
+                import traceback
+                traceback.print_exc()
+
+    else:
+        print(f"\n[i] Skipping MLflow upload (no model checkpoint or --save_model not specified)")
+
+    print(f"\n{'='*80}")
+    print(f"Pipeline Completed!")
+    print(f"{'='*80}\n")
+
+
+if __name__ == "__main__":
+    main()
+
