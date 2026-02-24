@@ -32,8 +32,8 @@ if models_dir not in sys.path:
 
 from models.abmil_v2 import ABMILModel, ABMILGatedBaseConfig
 
-# SSL 인증서 검증 비활성화 (자체 서명된 인증서를 사용하는 MLflow 서버 허용)
-os.environ['MLFLOW_TRACKING_INSECURE_TLS'] = 'true'
+# MLflow TLS 설정은 환경변수로 제어 (기본: false)
+os.environ.setdefault('MLFLOW_TRACKING_INSECURE_TLS', 'false')
 
 
 # =========================
@@ -112,8 +112,10 @@ def upload_to_mlflow(
     version = Path(model_save_dir).name.replace("Thyroid_prediction_model_", "")
 
     # MLflow 설정
-    mlflow.set_tracking_uri("https://mlflow.192.168.20.150.nip.io:30443")
-    mlflow.set_experiment("braf mutation")
+    tracking_uri = os.getenv('MLFLOW_TRACKING_URI', 'http://localhost:5000')
+    experiment_name = os.getenv('MLFLOW_EXPERIMENT_NAME', 'braf mutation')
+    mlflow.set_tracking_uri(tracking_uri)
+    mlflow.set_experiment(experiment_name)
 
     run_name = f"braf_full_auto_{version}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 

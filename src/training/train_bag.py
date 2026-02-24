@@ -990,8 +990,8 @@ def run_training(args):
             print(f"Generating Attention Heatmaps (Best Fold)")
             print(f"{'='*80}\n")
             
-            json_meta_dir = "/path/to/json/meta"
-            json_nonmeta_dir = "/path/to/json/nonmeta"
+            json_meta_dir = os.getenv('JSON_META_DIR', '/path/to/json/meta')
+            json_nonmeta_dir = os.getenv('JSON_NONMETA_DIR', '/path/to/json/nonmeta')
             
             generate_attention_heatmaps_from_results(
                 results_dir=str(args.model_save_dir),
@@ -999,8 +999,8 @@ def run_training(args):
                 json_nonmeta_dir=json_nonmeta_dir,
                 save_dir=str(viz_dir),
                 fold_num='best',
-                n_correct=3,
-                n_incorrect=3,
+                n_positive=3,
+                n_negative=3,
                 interpolation='gaussian',
                 dpi=200
             )

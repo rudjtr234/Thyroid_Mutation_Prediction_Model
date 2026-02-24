@@ -4,7 +4,7 @@ WSI Attention Heatmap Visualization (히트맵 + SVS Overlay)
 ✅ v2: Updated for separated JSON structure
    - Reads attention scores from attention_scores/attention_scores_fold{N}.json
    - Reads CV metrics from results_cv_summary.json
-✅ v3: SVS Thumbnail Overlay 지원 (TERT 모델에서 포팅)
+✅ v3: SVS Thumbnail Overlay 지원 (기존 파이프라인에서 포팅)
    - OpenSlide로 SVS 파일 로드 → heatmap을 WSI thumbnail 위에 오버레이
    - meta_braf / non_braf 두 폴더에서 SVS 자동 탐색
 """
