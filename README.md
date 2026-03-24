@@ -1,170 +1,242 @@
-# Thyroid BRAF Mutation Prediction (공개용)
+# Thyroid BRAF Mutation Prediction from H&E WSI
 
-WSI 패치 임베딩 기반으로 BRAF mutation(`BRAF-=0`, `BRAF+=1`)을 예측하는 공개용 MIL 파이프라인입니다.
-단일 모델(5-fold CV)과 5-model ensemble 학습 코드를 함께 포함합니다.
+<p align="center">
+  <img src="./image/pipeline_overview.png" alt="Pipeline Overview" width="90%"/>
+</p>
 
-![BRAF Pipeline](./image/pipeline_overview.png)
+---
 
-## 1. 문제 정의
-- 태스크: 이진 분류 (`Non-meta/BRAF-=0`, `Meta/BRAF+=1`)
-- 입력: 슬라이드 단위 패치 임베딩 배열 (`.npy`)
-- 출력: CV 성능 지표, 체크포인트, 시각화, attention heatmap
-- 지원 학습 방식:
-  - 단일 모델: `ABMIL` 5-fold CV
-  - 앙상블 모델: ABMIL 5개 독립 모델 학습 + 확률 평균
+## Overview
 
-## 2. 저장소 구조
-- `src/data/preprocess_data.py`: 패치 이미지 -> 임베딩(`UNI2-h`) 추출
-- `src/training/main.py`: 단일 모델 학습 엔트리포인트
-- `src/training/train_bag.py`: 단일 모델 5-fold CV 학습/평가
-- `src/training/mlflow_utils.py`: 단일 모델 MLflow 로깅(선택)
-- `src/training/ensemble/main_ensemble.py`: 앙상블 학습 엔트리포인트
-- `src/training/ensemble/train_ensemble.py`: 5-model 앙상블 학습/평가
-- `src/training/ensemble/mlflow_utils_ensemble.py`: 앙상블 MLflow 로깅(선택)
-- `src/training/ensemble/merge_ensemble.py`: 체크포인트 평균 병합 + 평가
-- `src/training/ensemble/run_ensemble.sh`: 공개용 앙상블 실행 템플릿
-- `src/evaluation/metric.py`: ROC/PR/혼동행렬 기반 지표 계산
-- `src/evaluation/visualization.py`: attention heatmap/overlay 생성
-- `src/utils/datasets.py`: bag-level dataset loader
-- `configs/abmil_config.yaml`: ABMIL 기본 설정
-- `image/pipeline_overview.png`: 전체 파이프라인 다이어그램
-- `image/example_attention_heatmap.png`: attention heatmap 예시
+갑상선 유두암(PTC) H&E 병리 슬라이드(WSI)로부터 **BRAF V600E 변이 여부를 예측**하는 딥러닝 파이프라인.
 
-## 3. 환경 설정
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
+BRAF V600E 변이는 PTC의 약 80%에서 발견되는 주요 드라이버 변이로, 예후 및 치료 반응성에 큰 영향을 미친다. 기존 유전자 검사(PCR, NGS)의 비용과 접근성 한계를 보완하기 위해, **H&E 조직 형태만으로 변이를 추정하는 AI 모델**을 개발하였다.
 
-권장 환경:
-- Python 3.10+
-- CUDA 가능한 PyTorch 환경 (임베딩/학습)
+**핵심 접근법:** Pathology Foundation Model 임베딩 (UNI2-H / H-optimus-0 등) → **Multi-MIL Model Zoo** (ABMIL / CLAM-SB / DSMIL / ACMIL / TransMIL) → 단일모델 5-Fold CV 또는 ABMIL 5-Model Ensemble
 
-## 4. 데이터 구조 예시
-임베딩 루트(`--data_root`)는 아래 형태를 가정합니다.
+---
+
+## Pipeline
 
 ```text
-/path/to/embeddings/
-  meta/
-    TC_XX_0001.npy
-    ...
-  nonmeta/
-    TC_YY_0001.npy
-    ...
+H&E WSI
+  │
+  ▼
+Patch Extraction ──────────── 20x 256×256 PNG 타일 분할
+  │
+  ▼
+Foundation Model Embedding ── UNI2-H (ViT-H, 1536-dim) · DDP 4-GPU
+  │                           H-optimus-0 (ViT-G, 1536-dim) · DDP 3-GPU
+  │                           출력: {slide_id}.npy [N, 1536]
+  ▼
+MIL Training Branch
+  ├─ Single Model (5-Fold CV): abmil | clam_sb | dsmil | acmil | transmil
+  └─ Ensemble (ABMIL x5): 고유 양성 700 + 공유 음성 700
+  ▼
+Evaluation ─────────────────── AUC, Acc, Sens, Spec, F1, PPV, NPV
+                               Attention/Heatmap 시각화
 ```
 
-단일 모델 CV split JSON(`--cv_split_file`) 예시:
+---
+
+## Project Structure
+
+```
+thyroid_mutation_public/
+├── src/
+│   ├── data/                          # 임베딩 추출
+│   │   ├── uni2-h/                    # UNI2-H 임베딩 추출 (DDP)
+│   │   │   ├── preprocess_data.py
+│   │   │   └── run.sh
+│   │   └── h-optimus-0/               # H-optimus-0 임베딩 추출 (DDP)
+│   │       ├── extract_features.py
+│   │       └── run.sh
+│   ├── models/                        # 모델 정의
+│   │   ├── abmil/                     # ABMIL (Gated Attention MIL)
+│   │   ├── clam_sb/                   # CLAM-SB style MIL
+│   │   ├── dsmil/                     # DSMIL
+│   │   ├── acmil/                     # ACMIL
+│   │   ├── transmil/                  # TransMIL
+│   │   ├── factory.py                 # 모델 생성/레지스트리
+│   │   ├── mil_template.py            # MIL 베이스 클래스
+│   │   └── layers.py                  # Attention 레이어, MLP 빌더
+│   ├── training/                      # 학습
+│   │   ├── ensemble/                  # 앙상블 학습
+│   │   │   ├── main_ensemble.py
+│   │   │   ├── train_ensemble.py
+│   │   │   ├── merge_ensemble.py
+│   │   │   └── run_ensemble.sh
+│   │   ├── main.py                    # 단일 모델 학습 엔트리포인트
+│   │   ├── train_bag.py               # 5-Fold CV 학습 루프
+│   │   └── run_bag.sh                 # 실행 스크립트
+│   ├── evaluation/                    # 평가 & 시각화
+│   │   ├── metric.py
+│   │   └── visualization.py
+│   └── utils/                         # 유틸리티
+│       └── datasets.py
+├── configs/
+│   └── mil_model_zoo.yaml             # 모델별 preset
+├── image/
+│   └── pipeline_overview.png
+└── requirements.txt
+```
+
+---
+
+## Model Architecture
+
+### Common Input
+
+- 입력: `X = {x_i}_{i=1..N}`, `x_i ∈ R^D` (Foundation Model tile embedding)
+  - UNI2-H: D = 1536 / H-optimus-0: D = 1536
+- 출력: slide-level binary logits (`BRAF+ / BRAF-`)
+
+### Multi-MIL Model Zoo
+
+| Model | 핵심 아이디어 | 구현 파일 |
+|-------|-------------|----------|
+| `abmil` | Gated attention으로 tile 중요도 학습 후 weighted pooling | `src/models/abmil/model.py` |
+| `clam_sb` | Bag branch + max-instance branch 결합 | `src/models/clam_sb/model.py` |
+| `dsmil` | Dual-stream (instance + bag) 기반 집계 | `src/models/dsmil/model.py` |
+| `acmil` | Multi-branch attention + stochastic top-k masking | `src/models/acmil/model.py` |
+| `transmil` | Transformer encoder로 patch 간 전역 상호작용 학습 | `src/models/transmil/model.py` |
+
+---
+
+## Dataset
+
+| 구분 | 설명 | 수량 |
+|------|------|------|
+| Meta (BRAF+) | BRAF 변이 양성 슬라이드 | ~2,000 WSI |
+| Non-Meta (BRAF−) | 변이 음성 슬라이드 | 862 WSI |
+| 슬라이드당 패치 수 | 20x 256×256 타일 | 평균 ~22,000개 |
+| 임베딩 차원 | Foundation Model feature vector | 1536-dim |
+
+### CV Split JSON 구조
 
 ```json
 {
+  "seed": 42,
+  "k_folds": 5,
+  "total_wsis": 1000,
+  "split_ratio": "6:2:2 (train:val:test)",
+  "balanced": true,
+  "meta_dir": "/path/to/meta_embeddings/npy",
+  "nonmeta_dir": "/path/to/nonmeta_embeddings/npy",
   "folds": [
     {
       "fold": 1,
-      "train_wsis": ["TC_XX_0001.npy"],
-      "val_wsis": ["TC_YY_0001.npy"],
-      "test_wsis": ["TC_ZZ_0001.npy"],
-      "train_count": 0,
-      "train_pos_count": 0,
-      "train_neg_count": 0,
-      "val_count": 0,
-      "val_pos_count": 0,
-      "val_neg_count": 0,
-      "test_count": 0,
-      "test_pos_count": 0,
-      "test_neg_count": 0
+      "train_wsis": ["slide_001.npy", "..."],
+      "val_wsis": ["slide_601.npy", "..."],
+      "test_wsis": ["slide_801.npy", "..."],
+      "train_count": 600,
+      "train_pos_count": 300,
+      "train_neg_count": 300,
+      "val_count": 200,
+      "val_pos_count": 100,
+      "val_neg_count": 100,
+      "test_count": 200,
+      "test_pos_count": 100,
+      "test_neg_count": 100
     }
   ]
 }
 ```
 
-앙상블 학습은 아래 2개 JSON을 사용합니다.
-- `ensemble_5models_cv.json`: 모델별 train/val split
-- `test_set.json`: 공통 test set
+---
 
-## 5. 임베딩 생성
-`preprocess_data.py`는 DDP(`torchrun`) 기반으로 동작합니다.
+## Quick Start
+
+### 1. 환경 설정
 
 ```bash
-torchrun --nproc_per_node=4 src/data/preprocess_data.py \
-  --tile_dir /path/to/tiles \
-  --out_dir /path/to/embeddings \
-  --batch_size 512
+pip install -r requirements.txt
 ```
 
-## 6. 단일 모델 학습 (5-fold CV)
+### 2. Feature Extraction
+
+**UNI2-H** 임베딩 추출:
+```bash
+cd src/data/uni2-h && bash run.sh
+```
+
+**H-optimus-0** 임베딩 추출:
+```bash
+cd src/data/h-optimus-0 && bash run.sh
+```
+
+### 3. Single Model Training (5-Fold CV)
+
+```bash
+cd src/training && bash run_bag.sh
+```
+
+또는 직접 실행:
+
 ```bash
 python src/training/main.py \
+  --model_name abmil \
   --data_root /path/to/embeddings \
-  --model_save_dir /path/to/outputs/braf_single_v0.1.0 \
-  --cv_split_file /path/to/cv_splits_braf.json \
-  --epochs 100 \
-  --lr 1e-4 \
-  --bag_size 2000 \
-  --seed 42 \
-  --save_model \
-  --save_best_only \
-  --generate_plots
+  --model_save_dir /path/to/outputs/model_abmil \
+  --cv_split_file /path/to/cv_splits.json \
+  --epochs 100 --lr 1e-5 --bag_size 3000 --seed 42 \
+  --save_model --save_best_only --generate_plots
 ```
 
-옵션:
-- `--test_fold N`: 특정 fold만 실행
-- `--debug`: 상세 로그 출력
+모델 선택: `--model_name {abmil, clam_sb, dsmil, acmil, transmil}`
 
-## 7. 앙상블 학습 (5-model)
-직접 실행:
+### 4. Ensemble Training (ABMIL x5)
 
 ```bash
-python src/training/ensemble/main_ensemble.py \
-  --data_root /path/to/embeddings \
-  --model_save_dir /path/to/outputs/braf_ensemble_v0.1.0 \
-  --ensemble_json /path/to/ensemble_5models_cv.json \
-  --test_json /path/to/test_set.json \
-  --epochs 100 \
-  --lr 1e-4 \
-  --bag_size 2000 \
-  --seed 42 \
-  --save_model \
-  --generate_plots
+cd src/training/ensemble && bash run_ensemble.sh
 ```
 
-또는 템플릿 스크립트:
+---
 
-```bash
-cd src/training/ensemble
-bash run_ensemble.sh
-```
+## Experimental Results
 
-## 8. 주요 산출물
-단일 모델(`main.py`) 실행 후 `--model_save_dir`:
-- `results_cv_summary_optimal.json`
-- `attention_scores/attention_scores_fold*.json`
-- `checkpoints/*.pt` (`--save_model` 사용 시)
-- `visualizations/` (`--generate_plots` 사용 시)
+### UNI2-H + ABMIL 5-Model Ensemble
 
-앙상블(`main_ensemble.py`) 실행 후 `--model_save_dir`:
-- `ensemble_results.json`
-- `attention_scores/attention_scores_model*.json`
-- `checkpoints/model_*.pt` (`--save_model` 사용 시)
-- `visualizations/` (`--generate_plots` 사용 시)
+| Version | Bag Size | Accuracy | AUC | Sensitivity | Specificity | Precision | NPV | F1 |
+|---------|----------|----------|-----|-------------|-------------|-----------|-----|-----|
+| v0.1.0 | 500 | 0.8250 | 0.9173 | 0.8900 | 0.7600 | 0.7876 | 0.8736 | 0.8357 |
+| v0.1.3 | 3000 | 0.8400 | 0.9171 | 0.9000 | 0.7800 | 0.8036 | 0.8864 | 0.8491 |
+| **v0.1.5** | **5000** | **0.8500** | **0.9232** | **0.8700** | **0.8300** | **0.8365** | **0.8646** | **0.8529** |
 
-예시 heatmap:
+### H-optimus-0 + ABMIL (단일 모델 5-Fold CV, 1000 WSI)
 
-![Example Attention Heatmap](./image/example_attention_heatmap.png)
+| Version | Bag Size | Accuracy | AUC | Sensitivity | Specificity | Precision | NPV | F1 |
+|---------|----------|----------|-----|-------------|-------------|-----------|-----|-----|
+| v0.13.6 | 500 | 0.8050 | 0.8916 | 0.8260 | 0.7840 | 0.7956 | 0.8195 | 0.8093 |
+| **v0.13.9** | **3000** | **0.8180** | **0.8937** | **0.8380** | **0.7980** | **0.8072** | **0.8313** | **0.8219** |
+| v0.13.11 | 5000 | 0.8150 | 0.8920 | 0.8340 | 0.7960 | 0.8056 | 0.8275 | 0.8188 |
 
-## 9. MLflow 연동 (선택)
-공개용 코드는 MLflow 서버 정보를 환경변수로 주입합니다.
+### H-optimus-0 + CLAM-SB (단일 모델 5-Fold CV, 1000 WSI)
 
-```bash
-export MLFLOW_TRACKING_URI="http://localhost:5000"
-export MLFLOW_EXPERIMENT_NAME="braf mutation"
-export MLFLOW_TRACKING_INSECURE_TLS="false"
-```
+| Version | Bag Size | Accuracy | AUC | Sensitivity | Specificity | Precision | NPV | F1 |
+|---------|----------|----------|-----|-------------|-------------|-----------|-----|-----|
+| v0.14.6 | 500 | 0.7910 | 0.8837 | 0.8660 | 0.7160 | 0.7554 | 0.8445 | 0.8057 |
+| **v0.14.9** | **3000** | **0.8020** | **0.8834** | **0.8360** | **0.7680** | **0.7834** | **0.8243** | **0.8086** |
 
-## 10. 보안 주의사항
-이 공개용 리포는 내부 호스트/IP/절대경로를 제외한 형태로 유지해야 합니다.
-아래 항목은 커밋하지 마세요:
-- 비공개 원본 데이터셋
-- 내부 인증정보/토큰
-- 내부 추적 서버 주소
-- 개인/사내 절대경로
+---
+
+## Hardware
+
+| 항목 | 사양 |
+|------|------|
+| GPU | NVIDIA GeForce RTX 3080 (10GB) × 4, Tesla V100S-PCIE-32GB × 3 |
+| CUDA | 12.2 / Driver 535.104.05 |
+| UNI2-H 임베딩 추출 | DDP 4-GPU (RTX 3080), batch_size=512 |
+| H-optimus-0 임베딩 추출 | DDP 3-GPU (V100S), batch_size=448 |
+| 학습 | Single GPU, batch_size=1 (MIL 표준) |
+
+---
+
+## Requirements
+
+- Python >= 3.8
+- PyTorch >= 2.2.0
+- timm == 0.9.16
+- transformers >= 4.40.0
+- scikit-learn, scipy, pandas, numpy
+- matplotlib, seaborn

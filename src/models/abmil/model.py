@@ -1,8 +1,8 @@
-from mil_template import MIL
+from ..mil_template import MIL
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from layers import GlobalAttention, GlobalGatedAttention, create_mlp
+from ..layers import GlobalAttention, GlobalGatedAttention, create_mlp
 from transformers import PretrainedConfig, PreTrainedModel
 from transformers import AutoConfig, AutoModel
 

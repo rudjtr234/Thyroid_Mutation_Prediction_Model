@@ -1,0 +1,50 @@
+# MIL model presets for H-optimus-0 / UNI2-H embeddings (1536-dim)
+
+common:
+  in_dim: 1536
+  num_classes: 2
+  epochs: 100
+  lr: 1e-5
+  bag_size: 5000
+
+abmil:
+  model_name: "abmil"
+  model_embed_dim: 512
+  model_attn_dim: 384
+  model_num_fc_layers: 1
+  model_dropout: 0.25
+  model_gate: true
+  model_in_dim: 1536        # UNI2-H features
+
+clam_sb:
+  model_name: "clam_sb"
+  model_embed_dim: 512
+  model_attn_dim: 384
+  model_num_fc_layers: 1
+  model_dropout: 0.25
+  model_gate: true
+
+dsmil:
+  model_name: "dsmil"
+  model_embed_dim: 512
+  model_num_fc_layers: 1
+  model_dropout: 0.25
+  dsmil_temperature: 1.0
+
+acmil:
+  model_name: "acmil"
+  model_embed_dim: 512
+  model_num_fc_layers: 1
+  model_dropout: 0.25
+  acmil_num_branches: 4
+  acmil_topk_ratio: 0.1
+
+transmul:
+  model_name: "transmul"
+  model_embed_dim: 512
+  model_dropout: 0.1
+  transmul_n_heads: 8
+  transmul_n_layers: 2
+  transmul_ffn_dim: 1024
+  transmul_max_tokens: 2048
+  bag_size: 2000

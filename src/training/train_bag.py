@@ -34,7 +34,6 @@ warnings.filterwarnings('ignore')
 current_dir = os.path.dirname(os.path.abspath(__file__))
 src_dir = os.path.dirname(current_dir)
 sys.path.insert(0, src_dir)
-sys.path.append(os.path.join(src_dir, 'models'))
 
 # evaluation 디렉토리 경로 추가
 evaluation_dir = os.path.join(src_dir, 'evaluation')
@@ -43,7 +42,7 @@ sys.path.insert(0, evaluation_dir)
 # =========================
 # Models & Utils import
 # =========================
-from abmil import ABMILModel, ABMILGatedBaseConfig
+from models.factory import create_mil_model
 from utils.datasets import ThyroidWSIDataset, set_seed
 import torch.nn.functional as F
 from typing import Dict, List, Optional, Tuple
@@ -68,9 +67,10 @@ from metric import (
 # EarlyStopping
 # =========================
 class EarlyStopping:
-    def __init__(self, patience=8, min_delta=0.001, restore_best_weights=True):
+    def __init__(self, patience=8, min_delta=0.001, mode='min', restore_best_weights=True):
         self.patience = patience
         self.min_delta = min_delta
+        self.mode = mode  # 'min' for loss, 'max' for AUC
         self.restore_best_weights = restore_best_weights
         self.best_score = None
         self.counter = 0
@@ -82,12 +82,20 @@ class EarlyStopping:
         if self.best_score is None:
             self.best_score = score
             improved = True
-        elif score > self.best_score + self.min_delta:
-            self.best_score = score
-            self.counter = 0
-            improved = True
-        else:
-            self.counter += 1
+        elif self.mode == 'min':
+            if score < self.best_score - self.min_delta:
+                self.best_score = score
+                self.counter = 0
+                improved = True
+            else:
+                self.counter += 1
+        else:  # mode == 'max'
+            if score > self.best_score + self.min_delta:
+                self.best_score = score
+                self.counter = 0
+                improved = True
+            else:
+                self.counter += 1
 
         if improved and model is not None:
             if self.restore_best_weights:
@@ -119,11 +127,16 @@ def save_model_checkpoint(model, fold_idx, fold_result, save_dir, args, is_best=
             'lr': args.lr,
             'bag_size': args.bag_size,
             'seed': args.seed,
-            'model': 'ABMILGatedBase'
+            'model_name': fold_result.get('model_name', args.model_name),
+            'model_kwargs': fold_result.get('model_config', {})
         }
     }
 
-    filename = f"{'best_' if is_best else ''}model_fold{fold_idx+1}_auc{fold_result['test_metrics_optimal']['auc']:.4f}.pt"
+    filename = (
+        f"{args.model_name}_"
+        f"{'best_' if is_best else ''}"
+        f"model_fold{fold_idx+1}_auc{fold_result['test_metrics_optimal']['auc']:.4f}.pt"
+    )
     checkpoint_path = save_dir / filename
     torch.save(checkpoint, checkpoint_path)
 
@@ -140,15 +153,21 @@ def load_cv_splits_with_paths(cv_split_file, data_root, debug=False):
     for fold_data in cv_splits['folds']:
         for split_name in ['train_wsis', 'val_wsis', 'test_wsis']:
             file_paths = []
-            for filename in fold_data[split_name]:
-                meta_path = os.path.join(data_root, 'meta', filename)
-                nonmeta_path = os.path.join(data_root, 'nonmeta', filename)
-                if os.path.exists(meta_path):
-                    file_paths.append(meta_path)
-                elif os.path.exists(nonmeta_path):
-                    file_paths.append(nonmeta_path)
+            for filepath in fold_data[split_name]:
+                # Case 1: 전체 경로인 경우 (절대 경로)
+                if os.path.isabs(filepath) and os.path.exists(filepath):
+                    file_paths.append(filepath)
+                # Case 2: 파일명만 있는 경우 (data_root에서 검색)
                 else:
-                    print(f"Warning: {filename} not found")
+                    filename = os.path.basename(filepath)  # 혹시 경로가 있어도 파일명 추출
+                    meta_path = os.path.join(data_root, 'meta', filename)
+                    nonmeta_path = os.path.join(data_root, 'nonmeta', filename)
+                    if os.path.exists(meta_path):
+                        file_paths.append(meta_path)
+                    elif os.path.exists(nonmeta_path):
+                        file_paths.append(nonmeta_path)
+                    else:
+                        print(f"Warning: {filepath} not found")
             fold_data[f'{split_name}_paths'] = file_paths
     return cv_splits
 
@@ -252,14 +271,12 @@ def run_one_epoch(model, dataloader, device, optimizer=None, train=False, thresh
             if train:
                 optimizer.zero_grad()
                 results_dict, _ = model(h=features, loss_fn=loss_fn, label=label)
-                loss = results_dict['loss']
-                logits = results_dict['logits']
+                logits, loss = results_dict['logits'], results_dict['loss']
                 loss.backward()
                 optimizer.step()
             else:
                 results_dict, _ = model(h=features, loss_fn=loss_fn, label=label)
-                loss = results_dict['loss']
-                logits = results_dict['logits']
+                logits, loss = results_dict['logits'], results_dict['loss']
 
             total_loss += loss.item()
             probs = torch.softmax(logits, dim=1)[:, 1]
@@ -589,6 +606,22 @@ def evaluate_full_wsi_for_visualization(
     return attention_scores_dict
 
 
+def get_model_overrides_from_args(args):
+    """Collect model override kwargs from CLI args."""
+    return {
+        "embed_dim": getattr(args, "model_embed_dim", None),
+        "attn_dim": getattr(args, "model_attn_dim", None),
+        "num_fc_layers": getattr(args, "model_num_fc_layers", None),
+        "dropout": getattr(args, "model_dropout", None),
+        "gate": getattr(args, "model_gate", None),
+        "temperature": getattr(args, "dsmil_temperature", None),
+        "n_heads": getattr(args, "transmil_n_heads", None),
+        "n_layers": getattr(args, "transmil_n_layers", None),
+        "ffn_dim": getattr(args, "transmil_ffn_dim", None),
+        "max_tokens": getattr(args, "transmil_max_tokens", None),
+    }
+
+
 # =========================
 # K-Fold CV with Multi-Threshold
 # =========================
@@ -596,7 +629,17 @@ def run_k_fold_cv(cv_splits, args, device):
     all_fold_results = []
     all_predictions, all_true_labels = [], []
     saved_model_paths = []
-    config = ABMILGatedBaseConfig()
+    resolved_model_kwargs = None
+    model_capabilities = {}
+    model_overrides = get_model_overrides_from_args(args)
+
+    print(f"\n{'='*80}")
+    print(f"Model Setup")
+    print(f"{'='*80}")
+    print(f"Model name: {args.model_name}")
+    print(f"Input dim: {args.in_dim}, Num classes: {args.num_classes}")
+    print(f"Overrides: { {k: v for k, v in model_overrides.items() if v is not None} }")
+    print(f"{'='*80}\n")
 
     for fold_data in cv_splits['folds']:
         fold_idx = fold_data['fold'] - 1
@@ -631,10 +674,22 @@ def run_k_fold_cv(cv_splits, args, device):
         test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=val_workers, pin_memory=True, persistent_workers=True, prefetch_factor=2)
 
         # Model
-        model = ABMILModel(config).to(device)
+        model, model_kwargs, model_capabilities = create_mil_model(
+            model_name=args.model_name,
+            in_dim=args.in_dim,
+            num_classes=args.num_classes,
+            **model_overrides,
+        )
+        model = model.to(device)
+
+        if resolved_model_kwargs is None:
+            resolved_model_kwargs = model_kwargs
+            print(f"Resolved model kwargs: {resolved_model_kwargs}")
+            print(f"Model capabilities: {model_capabilities}")
+
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=15, factor=0.5)
-        early_stopping = EarlyStopping(patience=8, min_delta=0.001)
+        early_stopping = EarlyStopping(patience=8, min_delta=0.001, mode='min')
 
         best_train_metrics, best_val_metrics = {}, {}
         history = {'train_loss': [], 'train_acc': [], 'train_auc': [], 'train_f1': [],
@@ -668,14 +723,14 @@ def run_k_fold_cv(cv_splits, args, device):
                   f"Val F1: {val_metrics['f1']:.4f} | "
                   f"LR: {optimizer.param_groups[0]['lr']:.2e}")
 
-            if val_metrics["auc"] > best_val_metrics.get("auc", 0):
+            if val_metrics["loss"] < best_val_metrics.get("loss", float('inf')):
                 best_val_metrics = val_metrics
                 best_train_metrics = train_metrics
-                print(f"  ↑ Best model updated (Val AUC: {val_metrics['auc']:.4f}, Val F1: {val_metrics['f1']:.4f})")
+                print(f"  ↑ Best model updated (Val Loss: {val_metrics['loss']:.4f}, Val AUC: {val_metrics['auc']:.4f})")
 
-            if early_stopping(val_metrics["auc"], model, epoch+1):
+            if early_stopping(val_metrics["loss"], model, epoch+1):
                 print(f"\n⚠ Early stopping triggered at epoch {epoch+1}")
-                print(f"  Best epoch was {early_stopping.best_epoch} with Val AUC: {best_val_metrics['auc']:.4f}")
+                print(f"  Best epoch was {early_stopping.best_epoch} with Val Loss: {best_val_metrics['loss']:.4f}")
                 early_stopping.restore_best(model)
                 break
 
@@ -686,15 +741,9 @@ def run_k_fold_cv(cv_splits, args, device):
         print(f"Step 1: Finding Optimal Threshold on Validation Set")
         print(f"{'='*80}")
 
-        # Threshold 후보 (더 세밀하게 탐색)
-        threshold_candidates = np.arange(0.05, 0.95, 0.05).tolist()
-
-        optimal_threshold, optimal_score, _ = \
-            find_optimal_threshold_on_validation(
-                model, val_loader, device,
-                thresholds=threshold_candidates,
-                metric='youden'  # Youden's Index로 최적화 (sens + spec - 1)
-            )
+        # Threshold 0.5 고정
+        optimal_threshold = 0.5
+        optimal_score = 0.0  # placeholder (validation에서 따로 계산 안 함)
 
         # ============================================================
         # 2️⃣ Test Set 평가 (최적 threshold만)
@@ -731,30 +780,37 @@ def run_k_fold_cv(cv_splits, args, device):
 
         # ============================================================
         # 3️⃣ Full WSI Attention Extraction (from test_loader full embeddings)
-        print(f"\n{'─'*80}")
-        print(f"Extracting FULL WSI Attention Scores")
-        print(f"{'─'*80}")
-        
-        meta_npy_dir = "/path/to/meta/npy"
-        nonmeta_npy_dir = "/path/to/nonmeta/npy"
-        
-        test_wsi_files = [os.path.basename(p) for p in fold_data['test_wsis_paths']]
-        
-        full_attention_scores = evaluate_full_wsi_for_visualization(
-            model, test_wsi_files, device, meta_npy_dir, nonmeta_npy_dir
-        )
-        
-        print(f"✅ Extracted FULL attention scores for {len(full_attention_scores)} WSIs")
-        
-        # True labels 매핑
-        wsi_to_label = {}
-        for wsi_path, label in zip(fold_data['test_wsis_paths'], test_labels):
-            wsi_name = Path(wsi_path).stem
-            wsi_to_label[wsi_name] = int(label)
-        
-        for wsi_name in full_attention_scores:
-            if wsi_name in wsi_to_label:
-                full_attention_scores[wsi_name]['true_label'] = wsi_to_label[wsi_name]
+        if model_capabilities.get("supports_full_attention", False):
+            print(f"\n{'─'*80}")
+            print(f"Extracting FULL WSI Attention Scores")
+            print(f"{'─'*80}")
+
+            meta_npy_dir = cv_splits.get('meta_dir', '')
+            nonmeta_npy_dir = cv_splits.get('nonmeta_dir', '')
+
+            test_wsi_files = [os.path.basename(p) for p in fold_data['test_wsis_paths']]
+
+            full_attention_scores = evaluate_full_wsi_for_visualization(
+                model, test_wsi_files, device, meta_npy_dir, nonmeta_npy_dir
+            )
+
+            print(f"✅ Extracted FULL attention scores for {len(full_attention_scores)} WSIs")
+
+            # True labels 매핑
+            wsi_to_label = {}
+            for wsi_path, label in zip(fold_data['test_wsis_paths'], test_labels):
+                wsi_name = Path(wsi_path).stem
+                wsi_to_label[wsi_name] = int(label)
+
+            for wsi_name in full_attention_scores:
+                if wsi_name in wsi_to_label:
+                    full_attention_scores[wsi_name]['true_label'] = wsi_to_label[wsi_name]
+        else:
+            full_attention_scores = {}
+            print(
+                f"\n[i] Skipping full WSI attention extraction for '{args.model_name}' "
+                f"(supports_full_attention={model_capabilities.get('supports_full_attention', False)})"
+            )
 
         # Fold 결과 출력
         print_fold_table(fold_data['fold'], best_train_metrics, best_val_metrics, test_metrics_optimal)
@@ -776,7 +832,10 @@ def run_k_fold_cv(cv_splits, args, device):
             "test_tpr": tpr.tolist(),
             "test_precision": precision.tolist(),
             "test_recall": recall.tolist(),
-            "full_attention_scores": full_attention_scores  # ✅ Test set은 전체 npy 사용, attention은 full_attention_scores에 저장
+            "full_attention_scores": full_attention_scores,
+            "model_name": args.model_name,
+            "model_config": model_kwargs,
+            "model_capabilities": model_capabilities,
         }
 
         all_fold_results.append(fold_result)
@@ -786,7 +845,9 @@ def run_k_fold_cv(cv_splits, args, device):
         # Model saving
         if args.save_model:
             if args.save_best_only:
-                if fold_idx == 0 or test_metrics_optimal['auc'] > max(r['test_metrics_optimal']['auc'] for r in all_fold_results[:-1]):
+                if len(all_fold_results) == 1 or test_metrics_optimal['auc'] > max(
+                    r['test_metrics_optimal']['auc'] for r in all_fold_results[:-1]
+                ):
                     path = save_model_checkpoint(model, fold_idx, fold_result, args.model_save_dir, args, is_best=True)
                     saved_model_paths.append(path)
                     print(f"✓ Best model saved")
@@ -800,7 +861,14 @@ def run_k_fold_cv(cv_splits, args, device):
         [{**r, 'test_metrics': r['test_metrics_optimal']} for r in all_fold_results]
     )
 
-    return all_fold_results, all_predictions, all_true_labels, saved_model_paths, summary_stats_optimal
+    return (
+        all_fold_results,
+        all_predictions,
+        all_true_labels,
+        saved_model_paths,
+        summary_stats_optimal,
+        resolved_model_kwargs,
+    )
 
 
 def convert_numpy(obj):
@@ -846,6 +914,25 @@ def run_training(args):
     Returns:
         dict: Training results including paths and metadata
     """
+    default_model_args = {
+        "model_name": "abmil",
+        "in_dim": 1536,
+        "num_classes": 2,
+        "model_embed_dim": None,
+        "model_attn_dim": None,
+        "model_num_fc_layers": None,
+        "model_dropout": None,
+        "model_gate": None,
+        "dsmil_temperature": None,
+        "transmil_n_heads": None,
+        "transmil_n_layers": None,
+        "transmil_ffn_dim": None,
+        "transmil_max_tokens": None,
+    }
+    for arg_name, default_value in default_model_args.items():
+        if not hasattr(args, arg_name):
+            setattr(args, arg_name, default_value)
+
     set_seed(args.seed)
 
     # GPU 설정 - CUDA_VISIBLE_DEVICES에 따라 첫 번째 GPU 사용
@@ -874,8 +961,14 @@ def run_training(args):
         
 
     # Training
-    fold_results, predictions, true_labels, model_paths, summary_stats_optimal = \
-        run_k_fold_cv(cv_splits, args, device)
+    (
+        fold_results,
+        predictions,
+        true_labels,
+        model_paths,
+        summary_stats_optimal,
+        resolved_model_kwargs,
+    ) = run_k_fold_cv(cv_splits, args, device)
 
     # Summary 출력 (Optimal Threshold)
     print(f"\n{'='*80}")
@@ -907,6 +1000,8 @@ def run_training(args):
 
     # 1. Optimal Threshold Summary (각 fold별 최적 threshold)
     cv_summary_optimal = {
+        "model_name": args.model_name,
+        "model_config": resolved_model_kwargs or {},
         "threshold": "optimal (per-fold from validation)",
         "mean_optimal_threshold": float(np.mean([r['optimal_threshold'] for r in fold_results])),
         "summary_statistics": summary_stats_optimal,
@@ -990,19 +1085,22 @@ def run_training(args):
             print(f"Generating Attention Heatmaps (Best Fold)")
             print(f"{'='*80}\n")
             
-            json_meta_dir = os.getenv('JSON_META_DIR', '/path/to/json/meta')
-            json_nonmeta_dir = os.getenv('JSON_NONMETA_DIR', '/path/to/json/nonmeta')
-            
+            json_meta_dir = "/data/143/member/jks/dataset/Thyroid_Mutation_dataset/uni2_embeddings/final_meta_dataset_v0.2.0/json"
+            json_nonmeta_dir = "/data/143/member/jks/dataset/Thyroid_Mutation_dataset/uni2_embeddings/final_non_meta_dataset_v0.2.0/json"
+            svs_base_dir = "/data/143/member/kwk/dl/thyroid/image/slide-v1-240412"
+
             generate_attention_heatmaps_from_results(
                 results_dir=str(args.model_save_dir),
                 json_meta_dir=json_meta_dir,
                 json_nonmeta_dir=json_nonmeta_dir,
                 save_dir=str(viz_dir),
                 fold_num='best',
-                n_positive=3,
-                n_negative=3,
+                n_positive=5,
+                n_negative=5,
                 interpolation='gaussian',
-                dpi=200
+                dpi=200,
+                svs_base_dir=svs_base_dir,
+                thumbnail_max_side=2048,
             )
             
             print(f"✓ Attention heatmaps saved to: {viz_dir}")

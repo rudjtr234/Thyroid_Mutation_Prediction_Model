@@ -786,9 +786,12 @@ def run_ensemble_training(args):
                     json.dump(convert_numpy(attn_data), f, indent=2)
                 print(f"[✓] Model {mid} attention scores saved: {attn_path}")
 
-            json_meta_dir = getattr(args, 'json_meta_dir', os.getenv('JSON_META_DIR', '/path/to/json/meta'))
-            json_nonmeta_dir = getattr(args, 'json_nonmeta_dir', os.getenv('JSON_NONMETA_DIR', '/path/to/json/nonmeta'))
-            svs_base_dir = getattr(args, 'svs_base_dir', os.getenv('SVS_BASE_DIR', '/path/to/svs_base_dir'))
+            json_meta_dir = getattr(args, 'json_meta_dir',
+                "/data/143/member/jks/dataset/Thyroid_Mutation_dataset/uni2_embeddings/final_meta_dataset_v0.1.1/json")
+            json_nonmeta_dir = getattr(args, 'json_nonmeta_dir',
+                "/data/143/member/jks/dataset/Thyroid_Mutation_dataset/uni2_embeddings/final_nonmeta_dataset_v0.1.0/json")
+            svs_base_dir = getattr(args, 'svs_base_dir',
+                "/data/143/member/kwk/dl/thyroid/image/slide-v1-240412")
 
             generate_ensemble_attention_heatmaps(
                 all_model_attention_scores=all_model_attention,
@@ -848,13 +851,13 @@ if __name__ == "__main__":
     parser.add_argument('--generate_plots', action='store_true',
                         help='Generate visualization plots')
     parser.add_argument('--json_meta_dir', type=str,
-                        default='/path/to/json/meta',
+                        default='/data/143/member/jks/dataset/Thyroid_Mutation_dataset/uni2_embeddings/final_meta_dataset_v0.1.1/json',
                         help='JSON metadata directory for meta cases')
     parser.add_argument('--json_nonmeta_dir', type=str,
-                        default='/path/to/json/nonmeta',
+                        default='/data/143/member/jks/dataset/Thyroid_Mutation_dataset/uni2_embeddings/final_nonmeta_dataset_v0.1.0/json',
                         help='JSON metadata directory for nonmeta cases')
     parser.add_argument('--svs_base_dir', type=str,
-                        default='/path/to/svs_base_dir',
+                        default='/data/143/member/kwk/dl/thyroid/image/slide-v1-240412',
                         help='SVS base directory for heatmap overlay')
 
     args = parser.parse_args()

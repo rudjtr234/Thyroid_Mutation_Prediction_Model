@@ -36,6 +36,18 @@ sys.path.insert(0, src_dir)
 
 from train_bag import run_training
 from mlflow_utils import upload_to_mlflow
+from models.factory import get_available_models
+
+
+def _str2bool(value):
+    if value is None:
+        return None
+    v = str(value).strip().lower()
+    if v in {"true", "1", "yes", "y"}:
+        return True
+    if v in {"false", "0", "no", "n"}:
+        return False
+    raise argparse.ArgumentTypeError("Expected boolean value (true/false).")
 
 
 def main():
@@ -49,13 +61,40 @@ def main():
     """
 
     # Parse arguments
-    parser = argparse.ArgumentParser(description='Train ABMIL model with 5-fold CV and MLflow logging')
+    parser = argparse.ArgumentParser(description='Train MIL model with 5-fold CV and MLflow logging')
     parser.add_argument('--data_root', type=str, required=True,
                         help='Root directory of embedding data')
     parser.add_argument('--model_save_dir', type=str, required=True,
                         help='Directory to save model checkpoints and results')
     parser.add_argument('--cv_split_file', type=str, required=True,
                         help='Path to CV split JSON file')
+    parser.add_argument('--model_name', type=str, default='abmil',
+                        choices=get_available_models(),
+                        help='MIL model name to train')
+    parser.add_argument('--in_dim', type=int, default=1536,
+                        help='Input embedding dimension')
+    parser.add_argument('--num_classes', type=int, default=2,
+                        help='Number of target classes')
+    parser.add_argument('--model_embed_dim', type=int, default=None,
+                        help='Override model embed dimension')
+    parser.add_argument('--model_attn_dim', type=int, default=None,
+                        help='Override attention hidden dimension (ABMIL/CLAM)')
+    parser.add_argument('--model_num_fc_layers', type=int, default=None,
+                        help='Override number of FC layers in patch embed MLP')
+    parser.add_argument('--model_dropout', type=float, default=None,
+                        help='Override dropout')
+    parser.add_argument('--model_gate', type=_str2bool, default=None,
+                        help='Override gated attention usage (true/false)')
+    parser.add_argument('--dsmil_temperature', type=float, default=None,
+                        help='Override DSMIL attention temperature')
+    parser.add_argument('--transmil_n_heads', type=int, default=None,
+                        help='Override TransMIL attention heads')
+    parser.add_argument('--transmil_n_layers', type=int, default=None,
+                        help='Override TransMIL transformer layers')
+    parser.add_argument('--transmil_ffn_dim', type=int, default=None,
+                        help='Override TransMIL feed-forward dimension')
+    parser.add_argument('--transmil_max_tokens', type=int, default=None,
+                        help='Override max tokens for TransMIL self-attention')
     parser.add_argument('--epochs', type=int, default=100,
                         help='Number of training epochs (default: 100)')
     parser.add_argument('--lr', type=float, default=1e-4,
@@ -99,7 +138,8 @@ def main():
                     lr=args.lr,
                     epochs=args.epochs,
                     bag_size=args.bag_size,
-                    seed=args.seed
+                    seed=args.seed,
+                    model_name=args.model_name,
                 )
                 print(f"\n[✓] MLflow upload completed!")
 
@@ -120,4 +160,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

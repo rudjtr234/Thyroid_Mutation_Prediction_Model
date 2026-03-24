@@ -7,15 +7,6 @@ from torch.utils.data import Dataset
 import random
 
 
-import os
-import glob
-import json
-import numpy as np
-import torch
-from torch.utils.data import Dataset
-import random
-
-
 class ThyroidWSIDataset(Dataset):
     """
     WSI 단위 Dataset
@@ -34,13 +25,13 @@ class ThyroidWSIDataset(Dataset):
 
         for filepath in wsi_files:
             # 경로에서 label 추론 (더 구체적인 패턴 매칭)
-            if 'final_meta_dataset' in filepath:
+            if 'final_meta_dataset' in filepath and 'non_meta' not in filepath and 'nonmeta' not in filepath:
                 label = 1  # BRAF+
-            elif 'final_nonmeta_dataset' in filepath:
+            elif 'final_nonmeta_dataset' in filepath or 'final_non_meta_dataset' in filepath:
                 label = 0  # BRAF-
             elif 'meta_test_final' in filepath or '/meta/' in filepath or '\\meta\\' in filepath:
                 label = 1  # BRAF+
-            elif 'nonmeta_test_final' in filepath or '/nonmeta/' in filepath or '\\nonmeta\\' in filepath:
+            elif 'nonmeta_test_final' in filepath or '/nonmeta/' in filepath or '\\nonmeta\\' in filepath or '/non-meta/' in filepath or '\\non-meta\\' in filepath:
                 label = 0  # BRAF-
             # 새로 추가: preprocess_data 경로 지원
             elif 'braf_meta' in filepath:
@@ -161,7 +152,7 @@ if __name__ == "__main__":
 
     # JSON 기반 K-Fold 로드 (data_root 파라미터 제거)
     fold_datasets = load_json_splits(
-        json_path="/path/to/cv_splits.json"
+        json_path="/home/mts/ssd_16tb/member/jks/Thyroid_Mutation_model/outputs/Thyroid_prediction_model_v0.1.0/cv_splits/cv_splits_balanced_k5_seed42_v0.2.1.json"
     )
 
     # Fold 1 확인
