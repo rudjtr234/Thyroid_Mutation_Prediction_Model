@@ -140,6 +140,7 @@ def main():
                     bag_size=args.bag_size,
                     seed=args.seed,
                     model_name=args.model_name,
+                    data_root=args.data_root,
                 )
                 print(f"\n[✓] MLflow upload completed!")
 
