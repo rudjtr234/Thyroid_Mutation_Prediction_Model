@@ -787,11 +787,11 @@ def run_ensemble_training(args):
                 print(f"[✓] Model {mid} attention scores saved: {attn_path}")
 
             json_meta_dir = getattr(args, 'json_meta_dir',
-                "/data/143/member/jks/dataset/Thyroid_Mutation_dataset/uni2_embeddings/final_meta_dataset_v0.1.1/json")
+                "/path/to/embeddings/meta/json")
             json_nonmeta_dir = getattr(args, 'json_nonmeta_dir',
-                "/data/143/member/jks/dataset/Thyroid_Mutation_dataset/uni2_embeddings/final_nonmeta_dataset_v0.1.0/json")
+                "/path/to/embeddings/nonmeta/json")
             svs_base_dir = getattr(args, 'svs_base_dir',
-                "/data/143/member/kwk/dl/thyroid/image/slide-v1-240412")
+                "/path/to/slide-v1")
 
             generate_ensemble_attention_heatmaps(
                 all_model_attention_scores=all_model_attention,
@@ -851,13 +851,13 @@ if __name__ == "__main__":
     parser.add_argument('--generate_plots', action='store_true',
                         help='Generate visualization plots')
     parser.add_argument('--json_meta_dir', type=str,
-                        default='/data/143/member/jks/dataset/Thyroid_Mutation_dataset/uni2_embeddings/final_meta_dataset_v0.1.1/json',
+                        default='/path/to/embeddings/meta/json',
                         help='JSON metadata directory for meta cases')
     parser.add_argument('--json_nonmeta_dir', type=str,
-                        default='/data/143/member/jks/dataset/Thyroid_Mutation_dataset/uni2_embeddings/final_nonmeta_dataset_v0.1.0/json',
+                        default='/path/to/embeddings/nonmeta/json',
                         help='JSON metadata directory for nonmeta cases')
     parser.add_argument('--svs_base_dir', type=str,
-                        default='/data/143/member/kwk/dl/thyroid/image/slide-v1-240412',
+                        default='/path/to/slide-v1',
                         help='SVS base directory for heatmap overlay')
 
     args = parser.parse_args()

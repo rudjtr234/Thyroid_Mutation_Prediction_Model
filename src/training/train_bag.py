@@ -1085,9 +1085,9 @@ def run_training(args):
             print(f"Generating Attention Heatmaps (Best Fold)")
             print(f"{'='*80}\n")
             
-            json_meta_dir = "/data/143/member/jks/dataset/Thyroid_Mutation_dataset/uni2_embeddings/final_meta_dataset_v0.2.0/json"
-            json_nonmeta_dir = "/data/143/member/jks/dataset/Thyroid_Mutation_dataset/uni2_embeddings/final_non_meta_dataset_v0.2.0/json"
-            svs_base_dir = "/data/143/member/kwk/dl/thyroid/image/slide-v1-240412"
+            json_meta_dir = "/path/to/embeddings/meta/json"
+            json_nonmeta_dir = "/path/to/embeddings/nonmeta/json"
+            svs_base_dir = "/path/to/slide-v1"
 
             generate_attention_heatmaps_from_results(
                 results_dir=str(args.model_save_dir),

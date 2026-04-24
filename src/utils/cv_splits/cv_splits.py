@@ -162,8 +162,8 @@ def convert_paths_to_target(cv_splits, source_prefix, target_prefix):
 if __name__ == "__main__":
     # UNI2-H 20x 256 Dataset (meta v0.2.0 500장, non_meta v0.2.0 500장)
     # 로컬 경로로 파일 읽기
-    meta_dir = "/data/member/jks/dataset/Thyroid_Mutation_dataset/uni2_embeddings/final_meta_dataset_v0.2.0/npy"
-    nonmeta_dir = "/data/member/jks/dataset/Thyroid_Mutation_dataset/uni2_embeddings/final_non_meta_dataset_v0.2.0/npy"
+    meta_dir = "/path/to/embeddings/meta/npy"
+    nonmeta_dir = "/path/to/embeddings/nonmeta/npy"
     save_dir = str(Path(__file__).resolve().parent)
 
     # 5-Fold CV 생성 (8:1:1 ratio)
@@ -175,8 +175,8 @@ if __name__ == "__main__":
         balance=True  # 500:500으로 balanced
     )
 
-    # 경로 변환: /data/member/ → /data/143/member/ (143 서버용)
-    cv_splits = convert_paths_to_target(cv_splits, "/data/member/", "/data/143/member/")
+    # 경로 변환: /path/to/ → /path/to/ (143 서버용)
+    cv_splits = convert_paths_to_target(cv_splits, "/path/to/", "/path/to/")
 
     # 저장
     Path(save_dir).mkdir(parents=True, exist_ok=True)
