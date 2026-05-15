@@ -113,6 +113,14 @@ def main():
                         help='Generate visualization plots')
     parser.add_argument('--test_fold', type=int, default=None,
                         help='Test only specific fold (default: None, test all folds)')
+    parser.add_argument('--tcga_embedding_dir', type=str, default=None,
+                        help='TCGA embedding npy 디렉토리 (지정 시 학습 후 자동 외부검증)')
+    parser.add_argument('--tcga_label_csv', type=str, default=None,
+                        help='TCGA 라벨 CSV 경로')
+    parser.add_argument('--tcga_out_dir', type=str, default=None,
+                        help='TCGA 외부검증 결과 저장 디렉토리 (기본: model_save_dir/tcga_eval)')
+    parser.add_argument('--tcga_no_heatmap', action='store_true',
+                        help='TCGA attention heatmap 생성 안 함')
 
     args = parser.parse_args()
 
@@ -131,7 +139,7 @@ def main():
             print(f"{'='*80}\n")
 
             try:
-                upload_to_mlflow(
+                mlflow_run_id = upload_to_mlflow(
                     model_save_dir=training_results['model_save_dir'],
                     json_path=training_results['json_path'],
                     model_checkpoint_path=training_results['model_checkpoint_path'],
@@ -142,9 +150,10 @@ def main():
                     model_name=args.model_name,
                     data_root=args.data_root,
                 )
-                print(f"\n[✓] MLflow upload completed!")
+                print(f"\n[✓] MLflow upload completed! run_id={mlflow_run_id}")
 
             except Exception as e:
+                mlflow_run_id = None
                 print(f"\n[!] MLflow upload failed: {e}")
                 print(f"    You can manually upload using:")
                 print(f"    python outputs/mlflow/mlflow_upload.py")
@@ -153,6 +162,45 @@ def main():
 
     else:
         print(f"\n[i] Skipping MLflow upload (no model checkpoint or --save_model not specified)")
+        mlflow_run_id = None
+
+    # TCGA 외부검증 (--tcga_embedding_dir 지정 시 자동 실행)
+    if args.tcga_embedding_dir and training_results and training_results.get('model_save_dir'):
+        print(f"\n{'='*80}")
+        print(f"TCGA External Validation")
+        print(f"{'='*80}\n")
+
+        try:
+            from inference.tcga_inference import run_inference as tcga_run
+
+            ckpt_dir = str(Path(training_results['model_save_dir']) / 'checkpoints')
+            tcga_out = args.tcga_out_dir or str(Path(training_results['model_save_dir']) / 'tcga_eval')
+            model_version = Path(training_results['model_save_dir']).name.replace(
+                'Thyroid_prediction_model_', '')
+
+            tcga_args = argparse.Namespace(
+                ckpt_dir=ckpt_dir,
+                embedding_dir=args.tcga_embedding_dir,
+                label_csv=args.tcga_label_csv,
+                out_dir=tcga_out,
+                model_version=model_version,
+                embed_model='UNI2-H',
+                threshold=0.5,
+                gpu=0,
+                min_patches=1000,
+                no_mlflow=False,
+                save_heatmap=not args.tcga_no_heatmap,
+                coord_dir=str(Path(args.tcga_embedding_dir).parent / 'json'),
+                patch_size=512,
+            )
+
+            tcga_run(tcga_args, mlflow_run_id=mlflow_run_id)
+            print(f"\n[✓] TCGA 외부검증 완료! 결과: {tcga_out}")
+
+        except Exception as e:
+            print(f"\n[!] TCGA 외부검증 실패: {e}")
+            import traceback
+            traceback.print_exc()
 
     print(f"\n{'='*80}")
     print(f"Pipeline Completed!")
