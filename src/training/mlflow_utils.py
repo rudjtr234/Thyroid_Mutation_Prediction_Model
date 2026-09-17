@@ -84,6 +84,7 @@ def upload_to_mlflow(
     mode: Optional[str] = None,
     model_name: str = "abmil",
     data_root: Optional[str] = None,
+    tcga_fold_results: Optional[List[Dict[str, Any]]] = None,
 ):
     """
     MLflow에 학습 결과를 자동으로 업로드하는 함수
@@ -236,6 +237,8 @@ def upload_to_mlflow(
                 body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
                 h1 { text-align: center; color: #333; margin-bottom: 30px; }
                 h2 { text-align: center; color: #555; margin-top: 40px; margin-bottom: 15px; }
+                h2.section-internal { color: #2e7d32; }
+                h2.section-tcga { color: #1565c0; }
                 table {
                     border-collapse: collapse;
                     width: 90%;
@@ -258,14 +261,17 @@ def upload_to_mlflow(
                 tr:nth-child(even) { background-color: #f9f9f9; }
                 tr:hover { background-color: #f0f0f0; }
                 .summary-table th { background-color: #2196F3; }
-                .summary-table tr:nth-last-child(3) { font-weight: bold; background-color: #d1ecf1; }
-                .summary-table tr:nth-last-child(2) { font-weight: bold; background-color: #fff3cd; }
-                .summary-table tr:last-child { font-weight: bold; background-color: #e8f5e9; }
+                .summary-table tr:nth-last-child(2) { font-weight: bold; background-color: #d1ecf1; }
+                .summary-table tr:last-child { font-weight: bold; background-color: #fff3cd; }
+                .tcga-table th { background-color: #1565c0; }
+                .tcga-table tr:last-child { font-weight: bold; background-color: #dce8f7; }
                 hr { margin: 40px auto; width: 90%; border: 1px solid #ddd; }
+                hr.section-divider { border: 2px solid #aaa; }
             </style>
         </head>
         <body>
-            <h1>5-Fold Cross-Validation Results</h1>
+            <h1>Training Results</h1>
+            <h2 class="section-internal">&#x1F4CA; Internal Validation (5-Fold CV)</h2>
         """)
 
         for fold_data in folds:
@@ -311,6 +317,13 @@ def upload_to_mlflow(
                 "F1": _safe_round(test_m.get("f1")),
             })
 
+        def _fmt_ci(s: dict, key: str) -> str:
+            lo = s.get(key, {}).get("ci_lower")
+            hi = s.get(key, {}).get("ci_upper")
+            if lo is None or hi is None:
+                return "-"
+            return f"{lo:.4f} ~ {hi:.4f}"
+
         summary_data.append({
             "Fold": "Mean",
             "Accuracy": _safe_round(test_summary.get("accuracy", {}).get("mean")),
@@ -335,14 +348,6 @@ def upload_to_mlflow(
             "NPV": _safe_round(test_summary.get("npv", {}).get("std")),
             "F1": _safe_round(test_summary.get("f1", {}).get("std")),
         })
-
-        def _fmt_ci(s: dict, key: str) -> str:
-            lo = s.get(key, {}).get("ci_lower")
-            hi = s.get(key, {}).get("ci_upper")
-            if lo is None or hi is None:
-                return "-"
-            return f"{lo:.4f} ~ {hi:.4f}"
-
         summary_data.append({
             "Fold": "95% CI",
             "Accuracy": _fmt_ci(test_summary, "accuracy"),
@@ -356,6 +361,45 @@ def upload_to_mlflow(
 
         summary_df = pd.DataFrame(summary_data)
         html_parts.append(summary_df.to_html(index=False, border=1, justify='center', classes='summary-table'))
+
+        # TCGA 외부검증 섹션
+        if tcga_fold_results:
+            html_parts.append('<hr class="section-divider">')
+            html_parts.append('<h2 class="section-tcga">&#x1F30D; TCGA-THCA External Validation</h2>')
+
+            tcga_rows = []
+            for fold in tcga_fold_results:
+                m = fold["metrics"]
+                auc_ci = m.get("auc_ci", [None, None])
+                acc_ci = m.get("acc_ci", [None, None])
+                tcga_rows.append({
+                    "Checkpoint": Path(fold["checkpoint"]).stem,
+                    "AUC": round(m["auc"], 4) if m["auc"] else "-",
+                    "Accuracy": round(m["acc"], 4),
+                    "F1": round(m["f1"], 4),
+                    "Sensitivity": round(m["sensitivity"], 4),
+                    "Specificity": round(m["specificity"], 4),
+                    "PPV": round(m["ppv"], 4),
+                    "NPV": round(m["npv"], 4),
+                    "N Slides": fold["num_slides"],
+                })
+
+            valid_aucs = [f["metrics"]["auc"] for f in tcga_fold_results if f["metrics"]["auc"]]
+            tcga_rows.append({
+                "Checkpoint": "Mean",
+                "AUC": round(sum(valid_aucs) / len(valid_aucs), 4) if valid_aucs else "-",
+                "Accuracy": round(sum(f["metrics"]["acc"] for f in tcga_fold_results) / len(tcga_fold_results), 4),
+                "F1": round(sum(f["metrics"]["f1"] for f in tcga_fold_results) / len(tcga_fold_results), 4),
+                "Sensitivity": round(sum(f["metrics"]["sensitivity"] for f in tcga_fold_results) / len(tcga_fold_results), 4),
+                "Specificity": round(sum(f["metrics"]["specificity"] for f in tcga_fold_results) / len(tcga_fold_results), 4),
+                "PPV": "-",
+                "NPV": "-",
+                "N Slides": "-",
+            })
+
+            tcga_df = pd.DataFrame(tcga_rows)
+            html_parts.append(tcga_df.to_html(index=False, border=1, justify='center', classes='tcga-table'))
+
         html_parts.append("</body></html>")
 
         unified_html = "\n".join(html_parts)
@@ -370,11 +414,11 @@ def upload_to_mlflow(
 
         viz_dir = Path(model_save_dir) / "visualizations"
         if viz_dir.exists():
-            mlflow.log_artifact(str(viz_dir), artifact_path="visualizations")
+            mlflow.log_artifacts(str(viz_dir), artifact_path="visualizations")
 
         attn_dir = Path(model_save_dir) / "attention_scores"
         if attn_dir.exists():
-            mlflow.log_artifact(str(attn_dir), artifact_path="attention")
+            mlflow.log_artifacts(str(attn_dir), artifact_path="attention")
 
         # 모델 체크포인트 업로드 (옵션)
         if model_checkpoint_path:

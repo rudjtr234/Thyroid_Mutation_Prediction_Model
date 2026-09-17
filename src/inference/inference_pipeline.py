@@ -452,6 +452,7 @@ class InferencePipeline:
         Returns:
             final_results: 최종 결과
         """
+        import time
         os.makedirs(output_dir, exist_ok=True)
 
         # 슬라이드 ID 추출
@@ -462,7 +463,10 @@ class InferencePipeline:
         print(f"[Pipeline] Processing: {slide_id}")
         print(f"{'='*60}")
 
+        t_total_start = time.perf_counter()
+
         # 1. 데이터 로드
+        t0 = time.perf_counter()
         if input_path.suffix == '.npy':
             embeddings = self.data_io.load_embedding(str(input_path))
         elif input_path.is_dir():
@@ -472,6 +476,7 @@ class InferencePipeline:
             embeddings = self.preprocessor.extract_features(tile_paths)
         else:
             raise ValueError(f"Unsupported input: {input_path}")
+        t_load = time.perf_counter() - t0
 
         # 좌표 로드 (있는 경우)
         coordinates = None
@@ -481,7 +486,9 @@ class InferencePipeline:
 
         # 2. 추론
         print("[Pipeline] Running inference...")
+        t0 = time.perf_counter()
         results = self.model.predict(embeddings, return_attention=save_attention)
+        t_infer = time.perf_counter() - t0
 
         # 3. 후처리
         interpretation = self.postprocessor.interpret_prediction(results, threshold)
@@ -498,6 +505,7 @@ class InferencePipeline:
         }
 
         # Attention 분석
+        t0 = time.perf_counter()
         if 'attention' in results and coordinates:
             top_patches = self.postprocessor.get_top_attention_patches(
                 results['attention'], coordinates, top_k=20
@@ -509,16 +517,35 @@ class InferencePipeline:
             self.postprocessor.create_attention_heatmap(
                 results['attention'], coordinates, heatmap_path
             )
+        t_heatmap = time.perf_counter() - t0
 
         # 결과 저장
         result_path = os.path.join(output_dir, f"{slide_id}_prediction.json")
         self.data_io.save_results(final_results, result_path)
+
+        t_total = time.perf_counter() - t_total_start
+
+        # 타이밍 기록
+        timing = {
+            'slide_id': slide_id,
+            'num_patches': int(embeddings.shape[0]),
+            'sec_load': round(t_load, 3),
+            'sec_infer': round(t_infer, 3),
+            'sec_heatmap': round(t_heatmap, 3),
+            'sec_total': round(t_total, 3),
+        }
+        timing_path = os.path.join(output_dir, f"{slide_id}_timing.json")
+        with open(timing_path, 'w') as f:
+            json.dump(timing, f, indent=2)
+
+        final_results['timing'] = timing
 
         # 결과 출력
         print(f"\n[Pipeline] Results for {slide_id}:")
         print(f"  Prediction: {interpretation['prediction']}")
         print(f"  Confidence: {interpretation['confidence']:.4f}")
         print(f"  BRAF+ Probability: {interpretation['braf_positive_probability']:.4f}")
+        print(f"  Timing: load={t_load:.2f}s / infer={t_infer:.2f}s / heatmap={t_heatmap:.2f}s / total={t_total:.2f}s")
 
         return final_results
 

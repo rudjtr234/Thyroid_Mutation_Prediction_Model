@@ -1,17 +1,15 @@
 #!/bin/bash
-# 5-Model Ensemble 학습 실행 스크립트
-# 실행: cd src/training/ensemble && bash run_ensemble.sh
 
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=2
 
 python main_ensemble.py \
-  --data_root /path/to/embeddings \
-  --model_save_dir /path/to/outputs/braf_ensemble_v0.x \
-  --ensemble_json /path/to/ensemble_5models_cv.json \
-  --test_json /path/to/test_set.json \
+  --data_root /path/to/dataset/uni2_embeddings \
+  --model_save_dir outputs/braf_ensemble_v0.1.7 \
+  --ensemble_json /path/to/dataset/braf_ensemble_meta_data/ensemble_5models_cv.json \
+  --test_json /path/to/dataset/braf_ensemble_meta_data/test_set.json \
   --epochs 100 \
   --lr 1e-4 \
-  --bag_size 5000 \
+  --bag_size 200 \
   --seed 42 \
   --save_model \
   --generate_plots

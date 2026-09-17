@@ -31,10 +31,19 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 
 
-def create_attention_heatmap_colormap():
-    """Attention score용 colormap (blue -> green -> yellow -> red)"""
-    colors = ['#2E3192', '#1BFFFF', '#00FF00', '#FFFF00', '#FF0000']
-    cmap = LinearSegmentedColormap.from_list('attention', colors, N=256)
+def create_attention_heatmap_colormap(label=None):
+    """Attention score용 colormap.
+
+    label=1 (BRAF+): 파랑 -> 청록 -> 초록 -> 노랑 -> 빨강
+    label=0 (BRAF-): 흰색 -> 연파랑 -> 하늘 -> 파랑 -> 짙은파랑
+    label=None     : BRAF+ colormap (기본값)
+    """
+    if label == 0:
+        colors = ['#FFFFFF', '#AED6F1', '#2980B9', '#1A5276', '#0B2D5E']
+        cmap = LinearSegmentedColormap.from_list('attention_neg', colors, N=256)
+    else:
+        colors = ['#2E3192', '#1BFFFF', '#00FF00', '#FFFF00', '#FF0000']
+        cmap = LinearSegmentedColormap.from_list('attention_pos', colors, N=256)
     return cmap
 
 
@@ -401,6 +410,10 @@ def visualize_single_heatmap(wsi_name, wsi_data, json_meta_dir, json_nonmeta_dir
         interpolation=interpolation
     )
     
+    # label 기반 cmap override (true_label 우선, 없으면 인자로 받은 cmap 사용)
+    if true_label is not None:
+        cmap = create_attention_heatmap_colormap(label=true_label)
+
     # 시각화
     fig, ax = plt.subplots(1, 1, figsize=(12, 10))
     im = ax.imshow(heatmap, cmap=cmap, aspect='auto', interpolation='bilinear')
@@ -430,8 +443,11 @@ def visualize_single_heatmap(wsi_name, wsi_data, json_meta_dir, json_nonmeta_dir
     ax.set_title('\n'.join(title_parts), fontsize=14, fontweight='bold', pad=20)
     
     cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cbar.set_label(f'Attention Score (Normalized)\n[0.000, 1.000]',
-                   fontsize=11, fontweight='bold')
+    if true_label == 0:
+        cbar_label = 'Attention Score (Normalized)\nHigh = Deep Blue (BRAF-)'
+    else:
+        cbar_label = 'Attention Score (Normalized)\nHigh = Red (BRAF+)'
+    cbar.set_label(cbar_label, fontsize=11, fontweight='bold')
     cbar.ax.tick_params(labelsize=9)
     
     ax.set_xlabel('Column Index', fontsize=11)

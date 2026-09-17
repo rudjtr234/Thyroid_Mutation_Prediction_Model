@@ -297,7 +297,7 @@ python src/training/register_model.py \
 ### 2026-04-13 — TCGA-THCA H-optimus-0 20x 임베딩 추출 완료
 
 - TCGA-THCA 514 WSI 임베딩 추출 완료 (H-optimus-0, 20x 256×256)
-  - 출력: `/data/dataset/TCGA/TCGA-THCA/embedding/h-optimus-0/20x/` (총 26,629,986 패치)
+  - 출력: `/path/to/TCGA-THCA/embedding/h-optimus-0/20x/` (총 26,629,986 패치)
   - RTX 3080 × 3 (GPU 0,1,5), UUID 지정, batch_size=64
 - TCGA-THCA 40x 512×512 패치 추출 완료 (514 WSI, 6,781,950 패치, 소요 90시간)
   - 가장자리 패딩 제거 / alpha=0 필터 / 흑백 배경 제거 개선 적용

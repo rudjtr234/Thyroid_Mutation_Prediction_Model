@@ -175,7 +175,7 @@ if __name__ == "__main__":
         balance=True  # 500:500으로 balanced
     )
 
-    # 경로 변환: /path/to/ → /path/to/ (143 서버용)
+    # 경로 변환: /path/to/ → /path/to/ (원격 서버용)
     cv_splits = convert_paths_to_target(cv_splits, "/path/to/", "/path/to/")
 
     # 저장

@@ -2,10 +2,7 @@
 """
 MLflow utilities for Ensemble experiment tracking.
 
-단일 MLflow run에 5개 모델 결과 + 앙상블 평균을 업로드.
-
-환경변수:
-    MLFLOW_TRACKING_URI: MLflow 서버 주소 (기본: http://localhost:5000)
+단일 MLflow run에 5개 모델 결과 + 앙상블 평균을 업로드
 """
 
 import json
@@ -20,6 +17,7 @@ import pandas as pd
 import torch
 import mlflow
 
+# SSL 인증서 검증 비활성화
 os.environ['MLFLOW_TRACKING_INSECURE_TLS'] = 'true'
 
 
@@ -68,6 +66,8 @@ def upload_ensemble_to_mlflow(
     epochs: int,
     bag_size: Optional[int],
     seed: int,
+    embedding_model: str = "uni2-h",
+    model_name: str = "abmil",
 ):
     """
     MLflow에 앙상블 학습 결과를 업로드
@@ -80,21 +80,33 @@ def upload_ensemble_to_mlflow(
         epochs: Epoch 수
         bag_size: Bag size
         seed: Random seed
+        embedding_model: 사용된 임베딩 종류 (uni2-h / h-optimus-0)
+        model_name: 앙상블 각 모델의 MIL 아키텍처 (abmil/clam_sb/dsmil/transmil/acmil)
+
+    Returns:
+        run_id: 생성된 MLflow run의 ID
     """
+    # JSON 로드
     with open(json_path, 'r') as f:
         results = json.load(f)
 
     models = results.get("models", [])
     ensemble_metrics = results.get("ensemble_metrics", {})
+    summary_stats = results.get("summary_statistics", {})
 
+    # 버전 추출
     version = Path(model_save_dir).name
 
+    # MLflow 설정
     mlflow.set_tracking_uri(os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5000"))
     mlflow.set_experiment("braf mutation")
 
     run_name = f"braf_ensemble_{version}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
     with mlflow.start_run(run_name=run_name):
+        run_id = mlflow.active_run().info.run_id
+
+        # Params
         params = {
             "version": version,
             "model_type": "ensemble",
@@ -105,18 +117,23 @@ def upload_ensemble_to_mlflow(
             "seed": seed,
             "early_stopping": "val_auc",
             "patience": 8,
+            "embedding_model": embedding_model,
+            "model_name": model_name,
         }
         if bag_size is not None:
             params["bag_size"] = bag_size
         mlflow.log_params(params)
 
+        # Description
         mlflow.set_tag(
             "Description",
             "BRAF Mutation Ensemble (5 models). "
+            "Each model: 700 unique positive + 700 shared negative. "
             "Final prediction: probability averaging. "
-            "Model: ABMIL + UNI2-H Embedding(1536-dim)."
+            f"Model: {model_name.upper()} + {embedding_model} Embedding(1536-dim)."
         )
 
+        # Training Curves (모델별 평균)
         all_train_loss, all_train_auc, all_val_loss, all_val_auc = [], [], [], []
 
         max_epochs = 0
@@ -133,6 +150,7 @@ def upload_ensemble_to_mlflow(
             all_val_loss.append(val_loss)
             all_val_auc.append(val_auc)
 
+        # Epoch별 평균 로깅
         for epoch in range(max_epochs):
             train_loss_at_epoch = [m[epoch] for m in all_train_loss if epoch < len(m)]
             if train_loss_at_epoch:
@@ -150,6 +168,7 @@ def upload_ensemble_to_mlflow(
             if val_auc_at_epoch:
                 mlflow.log_metric("val_auc", float(np.mean(val_auc_at_epoch)), step=epoch)
 
+        # Split-wise summary logging (개별 모델 평균)
         split_summaries = {
             "train": _aggregate_model_metrics(models, "train"),
             "val": _aggregate_model_metrics(models, "val"),
@@ -160,10 +179,12 @@ def upload_ensemble_to_mlflow(
                 mlflow.log_metric(f"{split_name}_{metric}_mean", stats["mean"])
                 mlflow.log_metric(f"{split_name}_{metric}_std", stats["std"])
 
+        # Ensemble metrics
         for metric, value in ensemble_metrics.items():
             if isinstance(value, (int, float)):
                 mlflow.log_metric(f"ensemble_{metric}", float(value))
 
+        # HTML 테이블 생성
         def _safe_round(val: Optional[float]) -> float:
             return round(float(val), 4) if val is not None else 0.0
 
@@ -200,6 +221,7 @@ def upload_ensemble_to_mlflow(
                 .summary-table tr:nth-last-child(3) { font-weight: bold; background-color: #d1ecf1; }
                 .summary-table tr:nth-last-child(2) { font-weight: bold; background-color: #fff3cd; }
                 .summary-table tr:last-child { font-weight: bold; background-color: #d4edda; }
+                .ensemble-row { background-color: #d4edda !important; }
                 hr { margin: 40px auto; width: 90%; border: 1px solid #ddd; }
             </style>
         </head>
@@ -207,6 +229,7 @@ def upload_ensemble_to_mlflow(
             <h1>BRAF Ensemble Results (5 Models)</h1>
         """)
 
+        # 각 모델별 테이블
         for model_data in models:
             model_id = model_data.get("model_id", "?")
             model_table_data = []
@@ -231,6 +254,7 @@ def upload_ensemble_to_mlflow(
             html_parts.append(f"<h2>Model {model_id}</h2>")
             html_parts.append(model_df.to_html(index=False, border=1, justify='center'))
 
+        # Summary Table
         html_parts.append("<hr><h2>Test Results Summary (All Models + Ensemble)</h2>")
 
         summary_data = []
@@ -249,6 +273,7 @@ def upload_ensemble_to_mlflow(
                 "F1": _safe_round(test_m.get("f1")),
             })
 
+        # Mean
         summary_data.append({
             "Model": "Mean",
             "Accuracy": _safe_round(test_summary.get("accuracy", {}).get("mean")),
@@ -262,6 +287,7 @@ def upload_ensemble_to_mlflow(
             "F1": _safe_round(test_summary.get("f1", {}).get("mean")),
         })
 
+        # Std
         summary_data.append({
             "Model": "Std",
             "Accuracy": _safe_round(test_summary.get("accuracy", {}).get("std")),
@@ -275,6 +301,7 @@ def upload_ensemble_to_mlflow(
             "F1": _safe_round(test_summary.get("f1", {}).get("std")),
         })
 
+        # Ensemble
         summary_data.append({
             "Model": "Ensemble",
             "Accuracy": _safe_round(ensemble_metrics.get("accuracy")),
@@ -296,6 +323,8 @@ def upload_ensemble_to_mlflow(
             f.write(unified_html)
 
         mlflow.log_artifact(str(html_path), artifact_path="tables")
+
+        # Artifacts 업로드
         mlflow.log_artifact(str(json_path), artifact_path="results")
 
         viz_dir = Path(model_save_dir) / "visualizations"
@@ -310,21 +339,26 @@ def upload_ensemble_to_mlflow(
 
         print(f"[✓] MLflow upload completed: {run_name}")
 
+    return run_id
+
 
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Upload ensemble results to MLflow")
     parser.add_argument("--model_save_dir", type=str, required=True,
-                        help="Model save directory (e.g., outputs/braf_ensemble_v0.1.0)")
+                        help="Model save directory (e.g., outputs/braf_ensemble_v0.1.6)")
     parser.add_argument("--lr", type=float, default=None)
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--bag_size", type=int, default=None)
     parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--embedding_model", type=str, default="uni2-h",
+                        choices=["uni2-h", "h-optimus-0"])
     args = parser.parse_args()
 
     save_dir = Path(args.model_save_dir)
 
+    # JSON 자동 탐색
     json_path = save_dir / "ensemble_results.json"
     if not json_path.exists():
         json_candidates = list(save_dir.glob("*results*.json"))
@@ -334,6 +368,7 @@ if __name__ == "__main__":
             print(f"[!] No results JSON found in {save_dir}")
             sys.exit(1)
 
+    # 체크포인트에서 config 자동 추출
     ckpt_dir = save_dir / "checkpoints"
     ckpt_path = None
     ckpt_config = {}
@@ -347,11 +382,12 @@ if __name__ == "__main__":
     epochs = args.epochs or 100
     bag_size = args.bag_size or ckpt_config.get("bag_size", 5000)
     seed = args.seed or ckpt_config.get("seed", 42)
+    embedding_model = args.embedding_model or ckpt_config.get("embedding_model", "uni2-h")
 
     print(f"Model dir  : {save_dir}")
     print(f"JSON       : {json_path}")
     print(f"Checkpoints: {ckpt_dir}")
-    print(f"Config     : lr={lr}, epochs={epochs}, bag_size={bag_size}, seed={seed}")
+    print(f"Config     : lr={lr}, epochs={epochs}, bag_size={bag_size}, seed={seed}, embedding_model={embedding_model}")
 
     upload_ensemble_to_mlflow(
         model_save_dir=str(save_dir),
@@ -361,4 +397,5 @@ if __name__ == "__main__":
         epochs=epochs,
         bag_size=bag_size,
         seed=seed,
+        embedding_model=embedding_model,
     )

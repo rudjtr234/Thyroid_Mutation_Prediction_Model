@@ -1,28 +1,32 @@
 """
-KPI 평가 스크립트 — 여러 슬라이드 배치 추론 후 p50/p95 계산.
+KPI 평가 스크립트 — 여러 슬라이드 배치 추론 후 p50/p95 계산 및 MLflow 업로드.
 
 학습된 체크포인트(.pt)를 직접 로드해서 추론합니다.
+(TorchScript 변환 불필요)
 
 E1 (추론 시간 p95):
   - 슬라이드 n장을 배치 추론하여 슬라이드별 total_sec 기록
-  - p50, p95 계산
+  - p50, p95 계산 후 MLflow에 metric으로 업로드
+
+실행 위치: Thyroid_Mutation_model_v2/
 
 사용법:
     # 앙상블 모델 (5개 .pt)
     python src/inference/kpi_eval.py \
-        --checkpoint_dir outputs/braf_ensemble_v1.0.0/checkpoints \
-        --embedding_dir /path/to/embeddings/npy \
+        --checkpoint_dir outputs/braf_ensemble_v0.1.7/checkpoints \
+        --embedding_dir /path/to/embeddings/meta/npy \
         --n_slides 50
 
     # 단일 모델 (fold .pt 하나)
     python src/inference/kpi_eval.py \
-        --checkpoint_dir outputs/Thyroid_prediction_model_v1.0.0/checkpoints \
-        --embedding_dir /path/to/embeddings/npy \
+        --checkpoint_dir outputs/Thyroid_prediction_model_v0.12.5/checkpoints \
+        --embedding_dir /path/to/embeddings/meta/npy \
         --n_slides 50 \
         --single_model
 """
 
 import os
+
 import json
 import time
 import argparse
@@ -35,8 +39,13 @@ import importlib.util
 def _ensure_torch_available():
     if importlib.util.find_spec("torch") is None:
         print("[!] ModuleNotFoundError: No module named 'torch'")
-        print(f"[!] Python: {sys.executable}")
-        print("[!] Install: pip install -r requirements.txt")
+        print("[!] 현재 python 실행 환경에 PyTorch가 설치되어 있지 않습니다.")
+        print(f"[!] 사용 중인 Python: {sys.executable}")
+        print("[!] 실행 예시:")
+        print("    conda activate braf")
+        print(f"    {sys.executable} -m pip install torch torchvision torchaudio")
+        print("    # 또는")
+        print(f"    {sys.executable} -m pip install -r requirements.txt")
         sys.exit(1)
 
 
@@ -46,6 +55,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+# 프로젝트 루트를 sys.path에 추가
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
@@ -67,13 +77,15 @@ def infer_single(model: ABMILModel, npy_path: Path, device: torch.device) -> dic
     """슬라이드 1장 추론 + 타이밍 측정"""
     t_total = time.perf_counter()
 
+    # 임베딩 로드
     t0 = time.perf_counter()
     embeddings = np.load(str(npy_path))
     t_load = time.perf_counter() - t0
 
+    # 추론
     t0 = time.perf_counter()
     with torch.no_grad():
-        h = torch.from_numpy(embeddings).float().unsqueeze(0).to(device)
+        h = torch.from_numpy(embeddings).float().unsqueeze(0).to(device)  # [1, N, 1536]
         results_dict, _ = model(h, return_attention=False)
         probs = F.softmax(results_dict["logits"], dim=-1).cpu().numpy()[0]
     t_infer = time.perf_counter() - t0
@@ -94,10 +106,12 @@ def infer_ensemble(models: list, npy_path: Path, device: torch.device) -> dict:
     """앙상블 5개 모델로 슬라이드 1장 추론 + 타이밍 측정"""
     t_total = time.perf_counter()
 
+    # 임베딩 로드
     t0 = time.perf_counter()
     embeddings = np.load(str(npy_path))
     t_load = time.perf_counter() - t0
 
+    # 앙상블 추론
     t0 = time.perf_counter()
     all_probs = []
     with torch.no_grad():
@@ -130,16 +144,19 @@ def run_kpi_eval(checkpoint_dir: str, embedding_dir: str, output_dir: str,
         out_dir.mkdir(parents=True, exist_ok=True)
     except PermissionError:
         fallback_dir = Path.home() / ".cache" / "thyroid_kpi_eval"
-        print(f"[!] Permission denied: {out_dir} → fallback: {fallback_dir}")
+        print(f"[!] Permission denied: {out_dir} (기본 출력 경로 생성 실패)")
+        print(f"[!] Fallback output_dir으로 변경: {fallback_dir}")
         out_dir = fallback_dir
         out_dir.mkdir(parents=True, exist_ok=True)
 
+    # 체크포인트 로드
     pt_files = sorted(Path(checkpoint_dir).glob("*.pt"))
     if not pt_files:
         print(f"[!] No .pt files in {checkpoint_dir}")
         return
 
     if single_model:
+        # 파일명 AUC 기준 best 1개 선택
         pt_files = pt_files[:1]
         models = [load_model(str(pt_files[0]), device)]
         print(f"[KPI] Single model: {pt_files[0].name}")
@@ -147,6 +164,7 @@ def run_kpi_eval(checkpoint_dir: str, embedding_dir: str, output_dir: str,
         models = [load_model(str(p), device) for p in pt_files]
         print(f"[KPI] Ensemble: {len(models)} models loaded")
 
+    # 슬라이드 샘플링
     npy_files = sorted(Path(embedding_dir).glob("*.npy"))
     if not npy_files:
         print(f"[!] No .npy files in {embedding_dir}")
@@ -156,6 +174,7 @@ def run_kpi_eval(checkpoint_dir: str, embedding_dir: str, output_dir: str,
     slides = random.sample(npy_files, min(n_slides, len(npy_files)))
     print(f"[KPI] {len(slides)} slides sampled")
 
+    # 배치 추론
     timings = []
     errors = []
     for npy_path in slides:
@@ -174,6 +193,7 @@ def run_kpi_eval(checkpoint_dir: str, embedding_dir: str, output_dir: str,
         print("[!] No timing data collected")
         return
 
+    # p50 / p95 계산
     total_secs = np.array([t["sec_total"] for t in timings])
     infer_secs = np.array([t["sec_infer"] for t in timings])
 
@@ -193,10 +213,13 @@ def run_kpi_eval(checkpoint_dir: str, embedding_dir: str, output_dir: str,
     print(f"  Infer  p50={kpi['infer_p50_sec']}s  p95={kpi['infer_p95_sec']}s")
     print(f"  Errors: {len(errors)}/{len(slides)}")
 
+    # 전체 결과 저장
     result_path = out_dir / "kpi_timing.json"
     with open(result_path, "w") as f:
         json.dump({"kpi": kpi, "timings": timings, "errors": errors}, f, indent=2)
     print(f"[✓] Saved: {result_path}")
+
+    print(f"[✓] Done  →  total_p95={kpi['total_p95_sec']}s / infer_p95={kpi['infer_p95_sec']}s")
 
 
 if __name__ == "__main__":

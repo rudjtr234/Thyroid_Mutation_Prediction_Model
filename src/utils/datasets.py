@@ -152,7 +152,7 @@ if __name__ == "__main__":
 
     # JSON 기반 K-Fold 로드 (data_root 파라미터 제거)
     fold_datasets = load_json_splits(
-        json_path="/home/mts/ssd_16tb/member/jks/Thyroid_Mutation_model/outputs/Thyroid_prediction_model_v0.1.0/cv_splits/cv_splits_balanced_k5_seed42_v0.2.1.json"
+        json_path="/path/to/legacy_outputs"
     )
 
     # Fold 1 확인

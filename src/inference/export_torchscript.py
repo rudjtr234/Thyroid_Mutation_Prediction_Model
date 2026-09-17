@@ -211,7 +211,8 @@ def load_checkpoint_weights(model: nn.Module, checkpoint_path: str) -> nn.Module
 def export_torchscript(model: nn.Module,
                        output_path: str,
                        example_input: torch.Tensor,
-                       use_trace: bool = True) -> str:
+                       use_trace: bool = True,
+                       fp16: bool = False) -> str:
     """
     모델을 TorchScript로 변환
 
@@ -220,18 +221,21 @@ def export_torchscript(model: nn.Module,
         output_path: 저장 경로
         example_input: 예시 입력 (tracing용)
         use_trace: True면 trace, False면 script
+        fp16: True면 fp16(half precision)으로 변환
 
     Returns:
         저장된 파일 경로
     """
+    if fp16:
+        model = model.half()
+        example_input = example_input.half()
+
     model.eval()
 
     with torch.no_grad():
         if use_trace:
-            # Tracing (더 안정적)
             traced_model = torch.jit.trace(model, example_input)
         else:
-            # Scripting (동적 제어 흐름 지원)
             traced_model = torch.jit.script(model)
 
     # 최적화
@@ -239,7 +243,7 @@ def export_torchscript(model: nn.Module,
 
     # 저장
     traced_model.save(output_path)
-    print(f"[✓] Exported TorchScript model to: {output_path}")
+    print(f"[✓] Exported TorchScript {'fp16' if fp16 else 'fp32'} model to: {output_path}")
 
     return output_path
 
@@ -296,6 +300,8 @@ def main():
                         help='Example number of patches for tracing')
     parser.add_argument('--device', type=str, default='cpu',
                         help='Device for export (cpu recommended)')
+    parser.add_argument('--fp16', action='store_true',
+                        help='Export model in fp16 (half precision)')
     args = parser.parse_args()
 
     # 출력 디렉토리 생성
@@ -327,14 +333,18 @@ def main():
     # 예시 입력 생성
     example_input = torch.randn(1, args.num_patches, 1536).to(args.device)
     print(f"[INFO] Example input shape: {example_input.shape}")
+    if args.fp16:
+        print("[INFO] Exporting in fp16 (half precision)")
 
     # TorchScript 변환
-    output_path = os.path.join(args.output_dir, f"{args.model_name}.pt")
-    export_torchscript(model, output_path, example_input, use_trace=True)
+    suffix = "_fp16" if args.fp16 else ""
+    output_path = os.path.join(args.output_dir, f"{args.model_name}{suffix}.pt")
+    export_torchscript(model, output_path, example_input, use_trace=True, fp16=args.fp16)
 
     # 검증
     print("\n[INFO] Verifying exported model...")
-    verify_exported_model(model, output_path, example_input)
+    verify_input = example_input.half() if args.fp16 else example_input
+    verify_exported_model(model, output_path, verify_input)
 
     # 모델 정보 저장
     info_path = os.path.join(args.output_dir, f"{args.model_name}_info.txt")

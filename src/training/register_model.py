@@ -1,14 +1,19 @@
 """
-Best fold .pt checkpoint를 MLflow Registered Model에 등록.
+outputs/{version}/checkpoints/의 .pt checkpoint를 thyr-braf Registered Model에 등록.
 
 우선순위:
 1) --model_path 가 지정되면 해당 파일 직접 등록
 2) 지정되지 않으면 outputs 디렉터리에서 ABMIL 기반 가장 높은 test AUC + test F1 폴드를 자동 선택
 
+등록 스키마는 thyr-braf v1(ABMIL TorchScript / framework=torchscript, task=mil) 기반으로
+동작하며, --compat=v2 로 v2 스타일 태그를 추가할 수 있다.
+
+실행 위치: Thyroid_Mutation_model_v2/
+
 사용법:
-    # checkpoint 파일 직접 지정
+    # checkpoints 파일 직접 지정 (v1 메타)
     python src/training/register_model.py \
-        --model_path outputs/Thyroid_prediction_model_v1.0.0/checkpoints/best_model_fold3_auc0.9300.pt
+        --model_path outputs/Thyroid_prediction_model_v0.12.1/checkpoints/best_model_fold3_auc0.9300.pt
 
     # outputs에서 자동 선택
     python src/training/register_model.py \
@@ -18,9 +23,6 @@ Best fold .pt checkpoint를 MLflow Registered Model에 등록.
     python src/training/register_model.py \
         --outputs_dir outputs \
         --compat v2
-
-환경변수:
-    MLFLOW_TRACKING_URI: MLflow 서버 주소 (기본: http://localhost:5000)
 """
 
 import argparse
@@ -58,6 +60,7 @@ def _safe_get(data: Dict[str, Any], key: str, default: Any = None) -> Any:
 
 
 def _extract_fold_from_filename(name: str) -> Optional[int]:
+    """파일명에서 fold 번호 추출 (fold3)."""
     match = re.search(r"fold(\d+)", name)
     return int(match.group(1)) if match else None
 
@@ -143,6 +146,7 @@ def find_candidate_versions(outputs_dir: Path, output_version: Optional[str]) ->
     for child in sorted(outputs_dir.iterdir()):
         if not child.is_dir():
             continue
+        # old_version 하위 디렉토리, 앙상블 버전, kpi_eval 등은 제외
         if child.name in ("old_version",) or child.name.startswith("braf_ensemble_") or child.name.startswith("kpi_eval_"):
             continue
         if not child.name.startswith("Thyroid_prediction_model_"):
@@ -175,6 +179,7 @@ def pick_best_checkpoint_from_outputs(
             continue
 
         model_name = str(_safe_get(summary, "model_name", "") or "").lower()
+        # model_name이 비어있거나 unknown이면 필터 통과 (기본 ABMIL로 간주)
         if model_filter and model_name and model_name not in ("none", "unknown", "null"):
             if model_filter.lower() not in model_name:
                 print(f"[i] skip version {version_dir.name}: model_name={model_name}")
@@ -216,11 +221,13 @@ def pick_best_checkpoint_from_outputs(
 
     if not candidates:
         raise RuntimeError(
-            f"No candidate checkpoint found from outputs_dir={outputs_root}, "
-            f"output_version={output_version}, model_filter={model_filter}"
+            f"No candidate checkpoint found from outputs_dir={outputs_root}, output_version={output_version}, model_filter={model_filter}"
         )
 
-    candidates.sort(key=lambda x: (x["test_auc"], x["test_f1"]), reverse=True)
+    candidates.sort(
+        key=lambda x: (x["test_auc"], x["test_f1"]),
+        reverse=True,
+    )
 
     print("\n[info] candidate checkpoints (top 10):")
     for c in candidates[:10]:
@@ -256,13 +263,7 @@ def _build_version_description(test_m: Dict[str, Any], fold_num: Any) -> str:
     )
 
 
-def build_version_tags(
-    mode: str,
-    fold_num: Any,
-    test_metrics: Dict[str, Any],
-    summary: Dict[str, Any],
-    source_version: str,
-) -> Dict[str, str]:
+def build_version_tags(mode: str, fold_num: Any, test_metrics: Dict[str, Any], summary: Dict[str, Any], source_version: str) -> Dict[str, str]:
     if mode == "v2":
         tags = {
             "embedding": EMBEDDING,
@@ -304,6 +305,7 @@ def register(model_path: str, alias: str = "production", compat: str = DEFAULT_C
     pt_name = pt_path.name
 
     if not test_m:
+        # fallback: parse AUC from filename
         test_auc = _extract_auc_from_filename(pt_name)
         test_m = {"auc": test_auc} if test_auc is not None else {}
     test_auc = _to_float(test_m.get("auc"))
@@ -327,6 +329,7 @@ def register(model_path: str, alias: str = "production", compat: str = DEFAULT_C
     mlflow.set_experiment("braf mutation")
 
     with mlflow.start_run(run_name=f"thyr-braf_{pt_name}"):
+        # Params (run 메타)
         mlflow.log_params({
             "model_name": MODEL_NAME,
             "checkpoint": pt_name,
@@ -337,6 +340,7 @@ def register(model_path: str, alias: str = "production", compat: str = DEFAULT_C
             "fold": fold_num,
         })
 
+        # metrics
         if test_auc is not None:
             mlflow.log_metric("test_auc", float(test_auc))
         if test_f1 is not None:
@@ -348,9 +352,11 @@ def register(model_path: str, alias: str = "production", compat: str = DEFAULT_C
         if isinstance(mean_f1, float):
             mlflow.log_metric("cv_mean_f1", float(mean_f1))
 
+        # .pt 업로드 (torchscript)
         mlflow.log_artifact(str(pt_path), artifact_path="model")
         print(f"[✓] Artifact uploaded")
 
+        # Registered Model 등록
         client = MlflowClient()
         run_id = mlflow.active_run().info.run_id
         source = f"runs:/{run_id}/model/{pt_name}"
@@ -380,6 +386,7 @@ def register(model_path: str, alias: str = "production", compat: str = DEFAULT_C
         for tag_name, tag_value in tags.items():
             client.set_model_version_tag(MODEL_NAME, mv.version, tag_name, tag_value)
 
+        # aliases
         client.set_registered_model_alias(MODEL_NAME, alias, mv.version)
         print(f"[✓] Registered: {MODEL_NAME} version {mv.version} (alias: {alias})")
 
@@ -392,7 +399,10 @@ def main():
         "--model_path",
         type=str,
         default=None,
-        help="Path to .pt checkpoint. If omitted, auto-select from outputs",
+        help=(
+            "Path to .pt checkpoint for explicit registration (e.g. outputs/Thyroid_prediction_model_v0.12.1/checkpoints/best_model_fold3_auc0.9200.pt). "
+            "If omitted, auto-select from outputs"
+        ),
     )
     parser.add_argument(
         "--outputs_dir",
@@ -404,20 +414,20 @@ def main():
         "--output_version",
         type=str,
         default=None,
-        help="Version folder name (e.g. Thyroid_prediction_model_v1.0.0). If omitted, search all versions",
+        help="Version folder name to search from outputs (e.g. Thyroid_prediction_model_v0.11.0). If omitted, search all versions",
     )
     parser.add_argument(
         "--model_filter",
         type=str,
         default="abmil",
-        help="Filter by model_name containing this string (default: abmil)",
+        help="Filter by results_json.model_name containing this string (default: abmil)",
     )
     parser.add_argument(
         "--compat",
         type=str,
         default=DEFAULT_COMPAT_MODE,
         choices=["v1", "v2"],
-        help="Compat mode for model version tags",
+        help="Compat mode for model version tags (v1: framework/task only, v2: extended tags)",
     )
     parser.add_argument(
         "--alias",

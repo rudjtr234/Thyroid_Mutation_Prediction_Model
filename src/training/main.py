@@ -116,7 +116,7 @@ def main():
     parser.add_argument('--tcga_embedding_dir', type=str, default=None,
                         help='TCGA embedding npy 디렉토리 (지정 시 학습 후 자동 외부검증)')
     parser.add_argument('--tcga_label_csv', type=str,
-                        default=None,
+                        default='/path/to/TCGA-THCA/genomic/braf_slide_labels.csv',
                         help='TCGA 라벨 CSV 경로')
     parser.add_argument('--tcga_out_dir', type=str, default=None,
                         help='TCGA 외부검증 결과 저장 디렉토리 (기본: model_save_dir/tcga_eval)')
@@ -161,7 +161,7 @@ def main():
                 save_heatmap=not args.tcga_no_heatmap,
                 coord_dir=str(Path(args.tcga_embedding_dir).parent / 'json'),
                 patch_size=512,
-                svs_base_dir=None,
+                svs_base_dir='/path/to/TCGA-THCA/raw',
             )
 
             tcga_fold_results = tcga_run(tcga_args, mlflow_run_id=None)

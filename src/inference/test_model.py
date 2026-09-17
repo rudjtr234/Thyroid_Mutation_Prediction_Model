@@ -15,7 +15,7 @@ def main():
     print("TorchScript ABMIL 모델 테스트")
     print("=" * 60)
 
-    model_path = "/data/member/jks/Thyroid_Mutation_model_v2/exports/abmil_torchscript/thyroid_abmil.pt"
+    model_path = "exports/abmil_torchscript/thyroid_abmil.pt"
     print(f"\n[1] 모델 로드: {model_path}")
 
     model = torch.jit.load(model_path)
@@ -25,8 +25,8 @@ def main():
     # 2. 테스트 임베딩 로드
     print("\n[2] 테스트 임베딩 로드")
 
-    meta_dir = "/data/member/jks/dataset/Thyroid_Mutation_dataset/uni2_embeddings/final_meta_dataset_v0.1.1/npy"
-    nonmeta_dir = "/data/member/jks/dataset/Thyroid_Mutation_dataset/uni2_embeddings/final_nonmeta_dataset_v0.1.0/npy"
+    meta_dir = "/path/to/embeddings/meta/npy"
+    nonmeta_dir = "/path/to/embeddings/nonmeta/npy"
 
     meta_files = sorted(glob.glob(f"{meta_dir}/*.npy"))[:3]
     nonmeta_files = sorted(glob.glob(f"{nonmeta_dir}/*.npy"))[:3]

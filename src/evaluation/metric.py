@@ -125,25 +125,41 @@ def compute_precision_recall_curve_data(y_true, y_prob):
     return precision_recall_curve(y_true, y_prob)
 
 
+def bootstrap_ci(values, n_bootstrap=2000, alpha=0.05, seed=42):
+    """
+    Bootstrap 기반 95% CI 계산 (fold 수가 적을 때 t-분포보다 안정적)
+    """
+    rng = np.random.RandomState(seed)
+    values = np.array(values)
+    boot_means = [np.mean(rng.choice(values, size=len(values), replace=True))
+                  for _ in range(n_bootstrap)]
+    lower = float(np.percentile(boot_means, 100 * alpha / 2))
+    upper = float(np.percentile(boot_means, 100 * (1 - alpha / 2)))
+    return lower, upper
+
+
 def compute_summary_statistics(fold_results):
     """
-    전체 fold 결과의 요약 통계 계산
+    전체 fold 결과의 요약 통계 계산 (mean, std, 95% CI 포함)
     """
     metrics_order = ['accuracy', 'auc', 'sensitivity', 'specificity', 'ppv', 'npv', 'f1']
     summary_stats = {}
-    
-    for set_name, metric_key in [('train', 'best_train_metrics'), 
-                                   ('val', 'best_val_metrics'), 
+
+    for set_name, metric_key in [('train', 'best_train_metrics'),
+                                   ('val', 'best_val_metrics'),
                                    ('test', 'test_metrics')]:
         summary_stats[set_name] = {}
         for metric in metrics_order:
             values = [r[metric_key][metric] for r in fold_results]
+            ci_lower, ci_upper = bootstrap_ci(values)
             summary_stats[set_name][metric] = {
                 'mean': float(np.mean(values)),
                 'std': float(np.std(values)),
+                'ci_lower': ci_lower,
+                'ci_upper': ci_upper,
                 'values': [float(v) for v in values]
             }
-    
+
     return summary_stats
 
 

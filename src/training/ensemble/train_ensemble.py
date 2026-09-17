@@ -44,7 +44,7 @@ sys.path.insert(0, evaluation_dir)
 # =========================
 # Models & Utils import
 # =========================
-from models.abmil import ABMILModel, ABMILGatedBaseConfig
+from models.factory import create_mil_model, get_available_models
 from utils.datasets import set_seed
 import torch.nn.functional as F
 from typing import Dict, List, Optional, Tuple
@@ -174,11 +174,14 @@ def save_model_checkpoint(model, model_idx, model_result, save_dir, args, is_bes
         'model_id': model_idx,
         'model_state_dict': model.state_dict(),
         'val_auc': model_result['best_val_metrics']['auc'],
+        'model_name': getattr(args, 'model_name', 'abmil'),
         'config': {
             'lr': args.lr,
             'bag_size': args.bag_size,
             'seed': args.seed,
-            'model': 'ABMILGatedBase'
+            'model_name': getattr(args, 'model_name', 'abmil'),
+            'in_dim': getattr(args, 'in_dim', 1536),
+            'embedding_model': getattr(args, 'embedding_model', 'uni2-h'),
         }
     }
 
@@ -472,7 +475,7 @@ def run_ensemble_training(args):
     all_test_probs = []  # 앙상블용
     test_labels = None
     saved_model_paths = []
-    config = ABMILGatedBaseConfig()
+    model_name = getattr(args, 'model_name', 'abmil')
 
     # 5개 모델 학습
     for model_info in ensemble_data['models']:
@@ -521,7 +524,12 @@ def run_ensemble_training(args):
                                persistent_workers=True, prefetch_factor=2)
 
         # Model
-        model = ABMILModel(config).to(device)
+        model, _, model_capabilities = create_mil_model(
+            model_name,
+            in_dim=getattr(args, 'in_dim', 1536),
+            num_classes=getattr(args, 'num_classes', 2),
+        )
+        model = model.to(device)
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=15, factor=0.5)
         early_stopping = EarlyStopping(patience=8, min_delta=0.001)
@@ -580,7 +588,7 @@ def run_ensemble_training(args):
 
         # Full WSI attention extraction (for heatmap visualization)
         full_attention_scores = {}
-        if args.generate_plots:
+        if args.generate_plots and model_capabilities.get("supports_full_attention", False):
             print(f"\n  Extracting full WSI attention for Model {model_id}...")
             full_attention_scores = _extract_full_wsi_attention(
                 model, test_filenames, labels, device,
@@ -588,6 +596,9 @@ def run_ensemble_training(args):
                 nonmeta_npy_dir=test_neg_dir,
             )
             print(f"  Extracted attention for {len(full_attention_scores)} WSIs")
+        elif args.generate_plots:
+            print(f"\n  Skipping attention extraction for Model {model_id} "
+                  f"(model '{model_name}' does not support full-WSI attention)")
 
         # ROC/PR curve
         fpr, tpr, _ = compute_roc_curve_data(labels, test_probs)
@@ -838,6 +849,13 @@ if __name__ == "__main__":
                         help='Path to ensemble CV split JSON (ensemble_5models_cv.json)')
     parser.add_argument('--test_json', type=str, required=True,
                         help='Path to test set JSON (test_set.json)')
+    parser.add_argument('--model_name', type=str, default='abmil',
+                        choices=get_available_models(),
+                        help='MIL model architecture to use for each ensemble member')
+    parser.add_argument('--in_dim', type=int, default=1536,
+                        help='Input embedding dimension')
+    parser.add_argument('--num_classes', type=int, default=2,
+                        help='Number of target classes')
     parser.add_argument('--epochs', type=int, default=100,
                         help='Number of training epochs (default: 100)')
     parser.add_argument('--lr', type=float, default=1e-4,
