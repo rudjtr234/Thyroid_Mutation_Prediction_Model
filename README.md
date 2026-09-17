@@ -28,14 +28,19 @@ Patch Extraction ──────────── 20x 256×256 PNG 타일 �
   ▼
 Foundation Model Embedding ── UNI2-H (ViT-H, 1536-dim) · DDP 4-GPU
   │                           H-optimus-0 (ViT-G, 1536-dim) · DDP 3-GPU
+  │                           H-optimus-1 (ViT-G, 1536-dim) · WSI 직접 읽기
   │                           출력: {slide_id}.npy [N, 1536]
   ▼
 MIL Training Branch
   ├─ Single Model (5-Fold CV): abmil | clam_sb | dsmil | acmil | transmil
-  └─ Ensemble (ABMIL x5): 고유 양성 700 + 공유 음성 700
+  └─ Ensemble (x5): abmil | transmil | acmil | dsmil
   ▼
-Evaluation ─────────────────── AUC, Acc, Sens, Spec, F1, PPV, NPV
-                               Attention/Heatmap 시각화
+Evaluation ─────────────────── 내부 CV + TCGA-THCA 외부검증
+  │                           AUC, Acc, Sens, Spec, F1, PPV, NPV (Bootstrap 95% CI)
+  │                           Attention/Heatmap 시각화
+  ▼
+External Validation ───────── fold별 (tcga_inference.py)
+                              확률 평균 앙상블 (tcga_inference_ensemble.py)
 ```
 
 ---
@@ -52,6 +57,9 @@ Thyroid_Mutation_model_v2/
 │   │   ├── h-optimus-0/               # H-optimus-0 임베딩 추출 (DDP)
 │   │   │   ├── extract_features.py
 │   │   │   └── run.sh
+│   │   ├── h-optimus-1/               # H-optimus-1 임베딩 추출
+│   │   │   ├── extract_features.py    #   패치 PNG 기반 (DDP)
+│   │   │   └── extract_features_wsi.py #  WSI 직접 읽기 (NFS I/O 회피)
 │   │   └── tcga/                      # TCGA-THCA 파이프라인 (외부 검증)
 │   │       ├── extract_patches.py     #   SVS → PNG 패치 추출 (20x 256×256, Otsu)
 │   │       ├── run_extract_patches.sh
@@ -76,17 +84,24 @@ Thyroid_Mutation_model_v2/
 │   │   │   ├── main_ensemble.py       #   엔트리포인트
 │   │   │   ├── train_ensemble.py      #   5-Model 앙상블 학습 루프
 │   │   │   ├── merge_ensemble.py      #   Weight Averaging 병합
-│   │   │   └── run_ensemble.sh        #   실행 스크립트
+│   │   │   ├── run_ensemble.sh        #   실행 스크립트 (UNI2-H)
+│   │   │   └── run_ensemble_hoptimus0.sh # 변환→검증→학습 3단계 파이프라인
 │   │   ├── main.py                    # 단일 모델 학습 엔트리포인트
 │   │   ├── train_bag.py               # 5-Fold CV 학습 루프
 │   ├── evaluation/                    # 평가 & 시각화
 │   │   ├── metric.py                  # 메트릭 계산
 │   │   └── visualization.py           # ROC/PR/학습곡선 + Attention Heatmap
 │   ├── inference/                     # 추론
-│   │   └── inference_pipeline.py      # 추론 파이프라인
+│   │   ├── inference_pipeline.py      # 추론 파이프라인
+│   │   ├── tcga_inference.py          # TCGA 외부검증 (fold별)
+│   │   └── tcga_inference_ensemble.py # TCGA 외부검증 (확률 평균 앙상블)
 │   └── utils/                         # 유틸리티
 │       ├── datasets.py                # Bag-level 데이터셋 로더
-│       └── cv_splits/                 # K-Fold 분할 JSON
+│       └── cv_splits/                 # K-Fold 분할 생성/변환/검증 스크립트
+│           ├── cv_splits.py           #   기본 K-Fold 분할 생성 (8:1:1)
+│           ├── make_splits_hoptimus1.py            # H-optimus-1 분할 생성
+│           ├── convert_ensemble_json_to_hoptimus.py # 앙상블 JSON 경로 변환
+│           └── verify_ensemble_json_hoptimus.py     # 학습 전 사전 검증
 ├── configs/
 │   └── mil_model_zoo.yaml             # 모델별 preset (abmil/clam_sb/dsmil/acmil/transmil)
 ├── outputs/                           # 학습 결과 (버전별 체크포인트, 시각화)
@@ -135,10 +150,12 @@ Thyroid_Mutation_model_v2/
 | v0.4.0_20x256 | H-optimus-0 | 1,000 (500+/500−) | 20x | 256×256 | 완료 |
 | v0.5.0_40x512 | H-optimus-0 | 4,900 (4,038+/862−) | 40x | 512×512 | **완료** |
 | **v0.6.0_20x224** | **H-optimus-0** | **4,900 (4,038+/862−)** | **20x** | **224×224** | **예정** |
+| v0.1.0_40x512 | H-optimus-1 | 1,724 (862+/862−) | 40x | 512×512 | 추출 진행 |
 
 - 20x patch `v0.2.0`는 선별된 1,000 WSI(500+/500−) 기준으로 패치 생성이 완료되어 있음.
 - H-optimus-0 `v0.5.0_40x512` 전체 완료 (meta 4,038 + non-meta 862).
 - `v0.6.0_20x224`: WSI level 0(40x)에서 448×448 read → 224×224 resize 방식, 패치 추출 스크립트 준비 완료.
+- H-optimus-1 `v0.1.0_40x512`: 862 balanced (1,724 WSI) 기준, WSI 직접 읽기 방식으로 추출 중. 학습 결과는 아직 없음.
 
 ---
 
@@ -156,6 +173,26 @@ cd src/data/uni2-h && bash run.sh
 cd src/data/h-optimus-0 && bash run.sh
 ```
 
+**H-optimus-1** 임베딩 추출 — 패치 PNG 방식 (DDP):
+```bash
+cd src/data/h-optimus-1
+torchrun --nproc_per_node=4 extract_features.py \
+    --tile_dir /path/to/patches --out_dir /path/to/output --batch_size 256
+```
+
+**H-optimus-1** 임베딩 추출 — WSI 직접 읽기 (대용량 슬라이드 권장):
+```bash
+# torchrun 불필요. 단일 프로세스에서 GPU 여러 장을 각각 워커로 사용
+python src/data/h-optimus-1/extract_features_wsi.py \
+    --wsi_dir  /path/to/slide-v1 \
+    --tile_dir /path/to/patches/meta \
+    --out_dir  /path/to/embeddings/meta \
+    --gpus 4 5 6 7
+```
+> 패치 PNG 수만 개를 여는 대신 WSI 1개만 열어 NFS I/O 병목을 회피한다.
+> 타일 좌표는 기존 패치 디렉토리의 파일명에서만 파싱하므로 기존 임베딩과
+> 동일한 타일 집합이 보장된다.
+
 ### 2. Ensemble Training (Main)
 
 5-Model Ensemble 학습:
@@ -171,6 +208,28 @@ python src/training/ensemble/main_ensemble.py \
     --epochs 100 --lr 1e-4 --bag_size 5000 --seed 42 \
     --save_model --generate_plots
 ```
+
+**H-optimus-0 앙상블** — 변환 → 검증 → 학습 3단계 자동 실행:
+
+```bash
+bash src/training/ensemble/run_ensemble_hoptimus0.sh
+```
+> UNI2-H 앙상블 분할 JSON을 H-optimus-0 경로로 변환한 뒤, 모든 `.npy` 경로와
+> 임베딩 차원(1536)·좌표 JSON 정합성을 사전 검증한다. 검증 실패 시 학습을
+> 시작하지 않고 non-zero exit으로 종료한다.
+
+**앙상블 TCGA 외부검증** (확률 평균):
+
+```bash
+python src/inference/tcga_inference_ensemble.py \
+    --ckpt_dir outputs/braf_ensemble_hoptimus0_vX.X.X/checkpoints \
+    --embedding_dir /path/to/TCGA-THCA/embedding/h-optimus-0/40x/npy \
+    --label_csv /path/to/TCGA-THCA/genomic/braf_slide_labels.csv \
+    --out_dir outputs/tcga_eval_ensemble_vX.X.X \
+    --save_heatmap
+```
+> `tcga_ensemble_*`(확률 평균 후 계산)와 `tcga_mean_*`(개별 fold 성능의 산술평균)은
+> 계산식이 다른 별개 지표이므로 혼용하지 않는다.
 
 ### 3. Single Model Training (5-Fold CV)
 
@@ -240,6 +299,55 @@ python src/training/register_model.py \
 ---
 
 ## Recent Updates
+
+### 2026-09-09 — H-optimus-1 임베딩 추출 / WSI 직접 읽기 방식 도입
+
+- **`src/data/h-optimus-1/` 신규**: H-optimus-1 (ViT-G, 1536-dim) 임베딩 추출
+  - `extract_features.py`: DDP 기반 패치 PNG 임베딩 추출
+    - DataLoader 공유 전략을 `file_system`으로 변경 — 타일 수가 많은 슬라이드에서
+      fd 한도를 초과해 `Too many open files`로 죽던 문제 해결
+  - `extract_features_wsi.py`: **WSI(.svs) 직접 읽기 방식** (패치 PNG 미사용)
+    - 패치 PNG 수만 개를 여는 대신 WSI 1개만 열고 `read_region`으로 타일 추출
+      → NFS lookup/getattr 왕복(전체 시간의 94%)이 사라짐
+    - 타일 좌표는 기존 패치 디렉토리의 **파일명에서만** 파싱 (내용 미판독)
+      → 조직 검출 기준 재현 불필요, 기존 임베딩과 동일한 타일 집합 보장
+    - DDP/all_gather 제거, GPU마다 서로 다른 슬라이드를 통째로 처리 (동기화 없음)
+    - CPU 리더 스레드 ↔ GPU 연산을 큐로 겹쳐 I/O 대기를 은닉
+    - 실측(36,062 타일 슬라이드): 패치 PNG 6분 25초 → WSI 16스레드 실질 ~1.5분
+- **`src/utils/cv_splits/make_splits_hoptimus1.py`**: H-optimus-1 40x512
+  (862 balanced, 1,724 WSI) 5-Fold CV split 생성
+
+> H-optimus-1은 현재 임베딩 추출 및 split 생성 단계이며, 학습 결과는 아직 없음.
+
+### 2026-08-10 — 앙상블 TCGA 외부검증 (확률 평균) 추가
+
+- **`src/inference/tcga_inference_ensemble.py` 신규**: 앙상블 5개 체크포인트의
+  확률을 평균해 외부검증 성능을 계산
+  - 기존 `tcga_inference.py`는 체크포인트를 5-Fold CV처럼 순회해 **fold별 성능만**
+    리포트하고 확률 평균 로직이 없었음
+  - 체크포인트 5개의 `model_id={1..5}` 무결성을 로드 **전에** 검증
+  - 확률은 리스트 위치가 아니라 **`slide_id` 기준으로 정렬 집계** (모델별 순서 상이 가능)
+  - `tcga_ensemble_*`(확률 평균 후 계산)와 `tcga_mean_*`(개별 fold 성능의 산술평균)은
+    계산식이 다른 별개 지표 — 혼용 금지
+  - attention heatmap은 1차 확률 추론으로 20장을 선정한 뒤 2차로만 재추론
+    (508장 × 5모델 전체에 attention을 뽑지 않아 메모리 절감)
+
+### 2026-09-09 — H-optimus-0 앙상블 3단계 파이프라인
+
+- **`src/training/ensemble/run_ensemble_hoptimus0.sh` 신규**: 변환 → 검증 → 학습을
+  한 번에 실행
+  1. `convert_ensemble_json_to_hoptimus.py` — UNI2-H 앙상블 fold 분할 JSON을
+     H-optimus-0 경로로 변환. `uni2_embeddings`와 `h_optimus_embeddings`는 meta/non_meta
+     명명 규칙과 버전 번호가 다르므로 부분 문자열 치환 대신 **dir 전체 값 단위 매핑**을
+     사용하고, JSON 구조에 의존하지 않도록 전체를 재귀 순회
+  2. `verify_ensemble_json_hoptimus.py` — 학습 시작 전 사전 검증, 실패 시 **non-zero
+     exit으로 학습을 시작하지 않음**
+     - 모든 train/val/test `.npy` 경로 존재 여부 전수 확인
+     - `.npy` 마지막 차원이 1536인지 mmap으로 확인 (전체 배열을 메모리에 올리지 않음)
+     - heatmap 생성 대상 test WSI의 좌표 JSON 존재 및 `patch_coords` 길이와
+       대응 `.npy`의 `shape[0]` 일치 확인
+  3. `main_ensemble.py` — `--model_name`으로 abmil/transmil/acmil/dsmil 선택 학습
+- ABMIL 외 **TransMIL / ACMIL / DSMIL 앙상블 실험** 추가 (v0.2.x / v0.3.x / v0.4.x)
 
 ### 2026-05-20 — Attention Heatmap 라벨별 색상 분리 / MLflow HTML 통합 / 파이프라인 순서 재구성
 
@@ -364,6 +472,37 @@ python src/training/register_model.py \
 
 - 외부 검증 기준 **CLAM-SB(v0.14.11)** 가 AUC 0.8078로 최고 일반화 성능
 - CLAM-SB Sensitivity 0.817로 내부 검증 수준 유지
+
+---
+
+### H-optimus-0 40x512 + 5-Model Ensemble (확률 평균) — 현재 Best
+
+> 임베딩: H-optimus-0 v0.5.0_40x512 · 앙상블 5개 모델의 softmax 확률 평균 (threshold=0.5)  
+> 내부 Test: 공유 테스트셋 200 WSI · 외부: TCGA-THCA 498 WSI (BRAF+ 234 / BRAF− 264)
+
+**내부 검증 (Ensemble Test)**
+
+| 버전 | 모델 | AUC | Acc | F1 | Sensitivity | Specificity | PPV | NPV |
+|------|------|-----|-----|----|-------------|-------------|-----|-----|
+| **v0.1.5** | **ABMIL** | **0.9286** | **0.8550** | **0.8466** | 0.8000 | **0.9100** | **0.8989** | **0.8198** |
+| v0.4.5 | DSMIL | 0.9242 | 0.8050 | 0.8060 | **0.8100** | 0.8000 | 0.8020 | 0.8081 |
+| v0.3.8 | ACMIL | 0.9202 | 0.8150 | 0.8042 | 0.7600 | 0.8700 | 0.8539 | 0.7838 |
+| v0.2.5 | TransMIL | 0.9174 | 0.8050 | 0.7845 | 0.7100 | 0.9000 | 0.8765 | 0.7563 |
+
+**TCGA-THCA 외부 검증 (Ensemble)**
+
+| 버전 | 모델 | AUC | Acc | F1 | Sensitivity | Specificity | PPV | NPV |
+|------|------|-----|-----|----|-------------|-------------|-----|-----|
+| **v0.2.5** | **TransMIL** | **0.8492** | 0.7851 | 0.7766 | 0.7949 | **0.7765** | **0.7592** | 0.8103 |
+| v0.1.5 | ABMIL | 0.8437 | **0.7932** | **0.7936** | **0.8462** | 0.7462 | 0.7472 | **0.8455** |
+| v0.3.8 | ACMIL | 0.8390 | 0.7711 | 0.7625 | 0.7821 | 0.7614 | 0.7439 | 0.7976 |
+| v0.4.5 | DSMIL | 0.8351 | 0.7831 | 0.7787 | 0.8120 | 0.7576 | 0.7480 | 0.8197 |
+
+- 외부 검증 AUC **0.8078 → 0.8492** 로 향상 (기존 최고 CLAM-SB 20x 단일모델 대비 **+0.0414**)
+- 확률 평균 앙상블이 개별 모델 평균보다 일관되게 우수
+  (TransMIL: 개별 평균 AUC 0.8391 → 앙상블 0.8492)
+- 내부 최고는 ABMIL(0.9286), 외부 최고는 TransMIL(0.8492) — 내부 성능 순위가
+  외부 일반화 순위와 일치하지 않음
 
 ---
 

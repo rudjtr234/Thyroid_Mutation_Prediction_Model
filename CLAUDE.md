@@ -70,21 +70,52 @@ src/
 - 모델별 고유 양성 700장 + 공유 음성 700장 + 공유 테스트셋
 - 최종 예측 = 5개 softmax 확률 평균 (threshold=0.5)
 - 학습 완료 시 MLflow `braf_ensemble_{version}` 자동 등록
+- 모델 종류: `--model_name {abmil,transmil,acmil,dsmil}` (ABMIL 외 3종 추가)
+
+### H-optimus-0 앙상블 3단계 (`run_ensemble_hoptimus0.sh`)
+1. `convert_ensemble_json_to_hoptimus.py` — UNI2-H 분할 JSON → H-optimus-0 경로 변환.
+   `uni2_embeddings`와 `h_optimus_embeddings`는 meta/non_meta 명명 규칙·버전이 다르므로
+   부분 문자열 치환 금지, **dir 전체 값 단위 매핑**만 사용 (JSON 전체 재귀 순회)
+2. `verify_ensemble_json_hoptimus.py` — 학습 전 사전 검증, 실패 시 **non-zero exit**
+   (모든 `.npy` 경로 존재 / 차원 1536 mmap 확인 / 좌표 JSON 길이 정합성)
+3. `main_ensemble.py` — 학습
+
+### 앙상블 외부검증 (`tcga_inference_ensemble.py`)
+- 확률은 리스트 위치가 아니라 **`slide_id` 기준 정렬 집계** (모델별 순서 상이 가능)
+- 체크포인트 `model_id={1..5}` 무결성을 로드 **전에** 검증
+- `tcga_ensemble_*`(확률 평균 후 계산) ≠ `tcga_mean_*`(fold 성능 산술평균) — **혼용 금지**
+- heatmap은 1차 추론으로 20장 선정 후 2차 재추론 (508×5 전체 attention 미산출, 메모리 절감)
 
 ## 베스트 결과 (현재 기준)
+
+### H-optimus-0 40x512 앙상블 (확률 평균) — 현재 Best
+| 설정 | 내부 AUC | 내부 Acc | TCGA AUC | TCGA Acc |
+|------|-----|-----|-----|-----|
+| ABMIL Ensemble v0.1.5 | **0.9286** | **0.855** | 0.8437 | **0.793** |
+| DSMIL Ensemble v0.4.5 | 0.9242 | 0.805 | 0.8351 | 0.783 |
+| ACMIL Ensemble v0.3.8 | 0.9202 | 0.815 | 0.8390 | 0.771 |
+| TransMIL Ensemble v0.2.5 | 0.9174 | 0.805 | **0.8492** | 0.785 |
+
+- 내부 최고는 ABMIL, 외부 최고는 TransMIL — 내부 순위가 외부 일반화 순위와 불일치
+- 확률 평균 앙상블 > 개별 모델 평균 (TransMIL: 0.8391 → 0.8492)
+
+### 단일 모델 (20x 256, 1000WSI)
 | 설정 | AUC | Acc | F1 |
 |------|-----|-----|----|
-| UNI2-H + ABMIL Ensemble v0.1.5 (bag=5000) | **0.9232** | 0.850 | 0.853 |
-| H-optimus-0 + TransMIL v0.16.5 (bag=5000, 1000WSI) | 0.8955 | 0.820 | 0.822 |
-| H-optimus-0 + ABMIL v0.13.9 (bag=3000, 1000WSI) | 0.8937 | 0.818 | 0.822 |
-| H-optimus-0 + CLAM-SB v0.14.11 (bag=5000, 1000WSI) | 0.8850 | 0.810 | 0.809 |
+| UNI2-H + ABMIL Ensemble v0.1.5 (bag=5000) | 0.9232 | 0.850 | 0.853 |
+| H-optimus-0 + TransMIL v0.16.5 (bag=5000) | 0.8955 | 0.820 | 0.822 |
+| H-optimus-0 + ABMIL v0.13.9 (bag=3000) | 0.8937 | 0.818 | 0.822 |
+| H-optimus-0 + CLAM-SB v0.14.11 (bag=5000) | 0.8850 | 0.810 | 0.809 |
 
-## TCGA 외부 검증 결과 (H-optimus-0 20x, 508 WSI)
+## TCGA 외부 검증 결과 (단일 모델, H-optimus-0 20x, 508 WSI)
 | 설정 | AUC | Acc | F1 |
 |------|-----|-----|----|
 | H-optimus-0 + CLAM-SB v0.14.11 | **0.8078** | 0.762 | 0.760 |
 | H-optimus-0 + ABMIL v0.13.9 | 0.7939 | 0.732 | 0.714 |
 | H-optimus-0 + TransMIL v0.16.5 | 0.7928 | 0.721 | 0.697 |
+
+> 앙상블(40x512, 498 WSI) 기준 0.8492로 단일 모델 대비 +0.0414 향상.
+> 앙상블 외부검증은 `src/inference/tcga_inference_ensemble.py` 사용.
 
 ## 실행 환경
 - **conda 환경**: `thyroid_mutation`
