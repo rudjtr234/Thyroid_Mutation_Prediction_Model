@@ -1,7 +1,7 @@
 ## -*- coding: utf-8 -*-
 """H-optimus-1 40x512 (862 balanced, 1724 WSI) 5-Fold CV split 생성.
 
-cv_splits.py의 생성 로직을 그대로 사용한다. 실행은 임베딩이 있는 ainode144에서:
+cv_splits.py의 생성 로직을 그대로 사용한다. 실행은 임베딩이 있는 서버에서:
     cd src/utils/cv_splits && python make_splits_hoptimus1.py
 """
 
